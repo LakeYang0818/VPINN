@@ -13,7 +13,8 @@ torch.manual_seed(42)
 
 class Linear(nn.Module):
     """ Copy of linear module from Pytorch, modified to have a Xavier init,
-        TODO : figure out what to do with the bias"
+        TODO : figure out what to do with the bias
+    """
     def __init__(self, in_features, out_features, bias=True):
         super(Linear, self).__init__()
         self.in_features = in_features
@@ -64,7 +65,7 @@ class DGM_layer(nn.Module):
 
 class Net(nn.Module):
 
-    def __init__(self, in_size, out_size, neurons, depth):
+    def __init__(self, *, in_size, out_size, neurons, depth):
         super(Net, self).__init__()
         self.dim = in_size
         self.input_layer = Linear(in_size, neurons)
@@ -77,4 +78,3 @@ class Net(nn.Module):
             s = torch.tanh(layer(X, s))
 
         return self.final_layer(s)
-

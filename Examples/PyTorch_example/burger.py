@@ -68,7 +68,7 @@ def Loss(model, S1, S2, S3, S4):
     return L1, L2, L3, L4
 
 
-model = Net(6, 1, 200, 6)
+model = Net(in_size=6, out_size=1, neurons=200, depth=6)
 opt = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(opt,gamma=0.99)
 
@@ -79,7 +79,7 @@ NS_3 = 100
 
 # Training parameters
 steps_per_sample = 10
-sampling_stages = 800
+sampling_stages = 20
 
 
 def train_model(model, optimizer, scheduler, num_epochs=100):

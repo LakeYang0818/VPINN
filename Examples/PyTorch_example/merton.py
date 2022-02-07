@@ -39,7 +39,7 @@ def utility(x):
 s1 = Sampler([T0, T, S1, S2], [0.5, 0, 0.5, 0.5])
 s2 = Sampler([T, T, S1, S2], [0, 0, 0.5, 0.5])
 
-model = Net(2, 1, 50, 3)
+model = Net(in_size=2, out_size=1, neurons=50, depth=3)
 opt = torch.optim.Adam(model.parameters(), lr=0.001)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(opt,gamma=0.99)
 
@@ -50,7 +50,7 @@ NS_3 = 100
 
 # Training parameters
 steps_per_sample = 10
-sampling_stages = 800
+sampling_stages = 20
 
 
 def print_graph(g, level=0):
