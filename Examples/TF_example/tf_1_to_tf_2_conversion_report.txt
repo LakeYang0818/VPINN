@@ -1,0 +1,145 @@
+TensorFlow 2.0 Upgrade Script
+-----------------------------
+Converted 5 files
+Detected 4 issues that require attention
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+File: DeepGalerkinMethod/FokkerPlanck_OUwithGaussianStart.py
+--------------------------------------------------------------------------------
+DeepGalerkinMethod/FokkerPlanck_OUwithGaussianStart.py:223:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+--------------------------------------------------------------------------------
+File: DeepGalerkinMethod/blackScholesPDE_europeanCallOption.py
+--------------------------------------------------------------------------------
+DeepGalerkinMethod/blackScholesPDE_europeanCallOption.py:174:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+--------------------------------------------------------------------------------
+File: DeepGalerkinMethod/MertonProblem.py
+--------------------------------------------------------------------------------
+DeepGalerkinMethod/MertonProblem.py:212:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+--------------------------------------------------------------------------------
+File: DeepGalerkinMethod/blackScholesPDE_americanPutOption.py
+--------------------------------------------------------------------------------
+DeepGalerkinMethod/blackScholesPDE_americanPutOption.py:246:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+================================================================================
+Detailed log follows:
+
+================================================================================
+================================================================================
+Input tree: 'DeepGalerkinMethod'
+================================================================================
+--------------------------------------------------------------------------------
+Processing file 'DeepGalerkinMethod/FokkerPlanck_OUwithGaussianStart.py'
+ outputting to 'DeepGalerkinMethod_tf_2/FokkerPlanck_OUwithGaussianStart.py'
+--------------------------------------------------------------------------------
+
+139:15: INFO: Added keywords to args of function 'tf.gradients'
+140:15: INFO: Added keywords to args of function 'tf.gradients'
+141:15: INFO: Added keywords to args of function 'tf.gradients'
+145:26: INFO: Added keywords to args of function 'tf.reduce_sum'
+146:14: INFO: Added keywords to args of function 'tf.reduce_sum'
+153:19: INFO: Added keywords to args of function 'tf.reduce_mean'
+173:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+184:9: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+185:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+186:17: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+197:12: INFO: Renamed 'tf.train.AdamOptimizer' to 'tf.compat.v1.train.AdamOptimizer'
+200:10: INFO: Renamed 'tf.global_variables_initializer' to 'tf.compat.v1.global_variables_initializer'
+203:7: INFO: Renamed 'tf.Session' to 'tf.compat.v1.Session'
+222:12: INFO: Renamed 'tf.train.Saver' to 'tf.compat.v1.train.Saver'
+223:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+Processing file 'DeepGalerkinMethod/DGM.py'
+ outputting to 'DeepGalerkinMethod_tf_2/DGM.py'
+--------------------------------------------------------------------------------
+
+46:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+48:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+50:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+52:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+56:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+58:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+60:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+62:50: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+118:49: INFO: Changing tf.contrib.layers xavier initializer to a tf.compat.v1.keras.initializers.VarianceScaling and converting arguments.
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+Processing file 'DeepGalerkinMethod/blackScholesPDE_europeanCallOption.py'
+ outputting to 'DeepGalerkinMethod_tf_2/blackScholesPDE_europeanCallOption.py'
+--------------------------------------------------------------------------------
+
+109:10: INFO: Added keywords to args of function 'tf.gradients'
+110:10: INFO: Added keywords to args of function 'tf.gradients'
+111:11: INFO: Added keywords to args of function 'tf.gradients'
+115:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+124:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+135:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+136:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+137:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+138:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+148:12: INFO: Renamed 'tf.train.AdamOptimizer' to 'tf.compat.v1.train.AdamOptimizer'
+151:10: INFO: Renamed 'tf.global_variables_initializer' to 'tf.compat.v1.global_variables_initializer'
+154:7: INFO: Renamed 'tf.Session' to 'tf.compat.v1.Session'
+173:12: INFO: Renamed 'tf.train.Saver' to 'tf.compat.v1.train.Saver'
+174:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+Processing file 'DeepGalerkinMethod/MertonProblem.py'
+ outputting to 'DeepGalerkinMethod_tf_2/MertonProblem.py'
+--------------------------------------------------------------------------------
+
+132:10: INFO: Added keywords to args of function 'tf.gradients'
+133:10: INFO: Added keywords to args of function 'tf.gradients'
+134:11: INFO: Added keywords to args of function 'tf.gradients'
+138:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+147:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+159:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+160:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+161:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+162:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+173:10: INFO: Added keywords to args of function 'tf.gradients'
+174:11: INFO: Added keywords to args of function 'tf.gradients'
+181:16: INFO: tf.train.exponential_decay requires manual check. To use learning rate decay schedules with TensorFlow 2.0, switch to the schedules in `tf.keras.optimizers.schedules`.
+
+181:16: INFO: Renamed 'tf.train.exponential_decay' to 'tf.compat.v1.train.exponential_decay'
+182:12: INFO: Renamed 'tf.train.AdamOptimizer' to 'tf.compat.v1.train.AdamOptimizer'
+185:10: INFO: Renamed 'tf.global_variables_initializer' to 'tf.compat.v1.global_variables_initializer'
+188:7: INFO: Renamed 'tf.Session' to 'tf.compat.v1.Session'
+211:12: INFO: Renamed 'tf.train.Saver' to 'tf.compat.v1.train.Saver'
+212:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+Processing file 'DeepGalerkinMethod/blackScholesPDE_americanPutOption.py'
+ outputting to 'DeepGalerkinMethod_tf_2/blackScholesPDE_americanPutOption.py'
+--------------------------------------------------------------------------------
+
+176:10: INFO: Added keywords to args of function 'tf.gradients'
+177:10: INFO: Added keywords to args of function 'tf.gradients'
+178:11: INFO: Added keywords to args of function 'tf.gradients'
+184:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+187:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+191:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+197:9: INFO: Added keywords to args of function 'tf.reduce_mean'
+208:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+209:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+210:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+211:18: INFO: Renamed 'tf.placeholder' to 'tf.compat.v1.placeholder'
+221:12: INFO: Renamed 'tf.train.AdamOptimizer' to 'tf.compat.v1.train.AdamOptimizer'
+224:10: INFO: Renamed 'tf.global_variables_initializer' to 'tf.compat.v1.global_variables_initializer'
+227:7: INFO: Renamed 'tf.Session' to 'tf.compat.v1.Session'
+245:12: INFO: Renamed 'tf.train.Saver' to 'tf.compat.v1.train.Saver'
+246:4: WARNING: *.save requires manual check. (This warning is only applicable if the code saves a tf.Keras model) Keras model.save now saves to the Tensorflow SavedModel format by default, instead of HDF5. To continue saving to HDF5, add the argument save_format='h5' to the save() function.
+--------------------------------------------------------------------------------
+
