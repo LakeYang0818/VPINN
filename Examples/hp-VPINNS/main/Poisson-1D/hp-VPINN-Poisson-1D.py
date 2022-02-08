@@ -235,7 +235,7 @@ if __name__ == "__main__":
     Opt_tresh = 2e-32
     var_form  = 1
     N_Element = 1
-    Net_layer = [1] + [20] * 4 + [1]
+    Net_layer = [1] + [60] * 4 + [1]
     N_testfcn = 60
     N_Quad = 80
     N_F = 500
@@ -247,9 +247,10 @@ if __name__ == "__main__":
        return test
 
     #++++++++++++++++++++++++++++
-    omega = 8*np.pi
-    amp = 1
-    r1 = 80
+    # u_
+    omega = 4*np.pi
+    amp = 0.1
+    r1 = 5
     def u_ext(x):
         utemp = 0.1*np.sin(omega*x) + np.tanh(r1*x)
         return amp*utemp
