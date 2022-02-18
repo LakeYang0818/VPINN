@@ -1,0 +1,53 @@
+---
+seed: 42
+
+# PDE settings .................................................................
+
+# The space, equation, and external forcing
+space:
+  dimension: 2
+  # The domain boundary, given as [[x_0, x_1], [y_0, y_1]]
+  boundary: [[-1, 1], [-1, 1]]
+  grid_size: [9, 9]
+PDE:
+  type: Poisson2D
+  external_function:
+  Helmholtz:
+    k: 10
+
+# Test function settings .......................................................
+# The variational form to use; can be 1, 2, or 3
+variational_form: 1
+
+# The number of test functions to use. Test functions are Jacobi polynomials.
+N_test_functions: 10
+
+# number of quadrature points
+N_quad: [5, 5]
+
+# number of random points on which to evaluate f to use as training points
+N_f: 500
+
+# Neural net architecture ......................................................
+architecture:
+  layers: 5
+  nodes_per_layer: 43
+
+# Training settings ............................................................
+N_iterations: 10
+threshold: 2e-32
+learning_rate: 0.001
+loss_weight: 1
+batch_size: 10
+
+# Plot settings ................................................................
+plots:
+  color: blue
+rcParams:
+  text.usetex: True
+  mathtext.fontset: 'stix'
+  font.family: 'serif'
+  font.size: 20
+  figure.figsize: [10, 8]
+  lines.linewidth: 3
+  figure.autolayout: True
