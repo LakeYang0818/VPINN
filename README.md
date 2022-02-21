@@ -21,7 +21,9 @@ into a virtal environment to avoid interfering with system-wide package installa
 | Tensorflow     | \>= 2.0 | Machine learning package.  |
 | PyYAML         | \>= 6.0 | Handles configuration      |
 
-> **_Note:_**  On Apple Silicon, install tensorflow via `pip install tensorflow-macos`.
+> **_Note:_**  On Apple Silicon, install tensorflow via `pip install tensorflow-macos`. 
+> If you wish to train on your GPU, try following [these](https://developer.apple.com/metal/tensorflow-plugin/) 
+> instructions (although we have not managed to do so.)
 > 
 ### How to run
 To execute, run the `main.py` file.

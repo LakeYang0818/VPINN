@@ -22,10 +22,10 @@ PDE:
 variational_form: 1
 
 # The number of test functions to use. Test functions are Jacobi polynomials.
-N_test_functions: 3
+N_test_functions: 60
 
 # number of quadrature points
-N_quad: 60
+N_quad: 80
 
 # Neural net architecture ......................................................
 architecture:
@@ -33,7 +33,7 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ............................................................
-N_iterations: 1000
+N_iterations: 200
 learning_rate: 0.001
 loss_weight: 1
 
@@ -41,6 +41,7 @@ loss_weight: 1
 plots:
   plot_points: 100
   color: blue
+  # these are passed to matplotlib.rcParams
   rcParams:
     text.usetex: True
     mathtext.fontset: 'stix'

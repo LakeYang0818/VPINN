@@ -195,17 +195,18 @@ class VPINN(keras.Model):
     def train(self, training_data: DataSet, n_iterations: int):
         """Trains the model using a training DataSet, for n_iterations."""
 
+        loss = tf.constant([0], dtype=self._data_type)
         loss_v = self.calculate_variational_loss()
 
         for it in range(n_iterations):
             for _, (x_train, y_train) in enumerate(training_data):
                 with tf.GradientTape() as tape:
+                    tape.watch(x_train)
                     loss_b = tf.math.reduce_mean(
                         tf.math.squared_difference(self.evaluate(x_train, training=True),
                                                    y_train))
                     loss = tf.add(tf.multiply(tf.constant([self._loss_weight], dtype=self._data_type),
                                               loss_b), loss_v)
-                    tape.watch(x_train)
                 grads = tape.gradient(loss, self.trainable_variables)
 
                 # Update the loss tracker

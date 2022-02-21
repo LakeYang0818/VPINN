@@ -29,9 +29,9 @@ def plot_quadrature_data(quadrature_data: DataGrid):
 
 
 # Plot the loss over time
-def plot_loss(loss_tracker: list):
+def plot_loss(loss_tracker: dict):
     plt.title('Loss over time')
-    #plt.plot(loss_tracker['iter'], loss_tracker['total_loss'], label=r'total loss', color='black')
+    # plt.plot(loss_tracker['iter'], loss_tracker['total_loss'], label=r'total loss', color='black')
     plt.plot(loss_tracker['iter'], loss_tracker['loss_b'], label=r'boundary loss', color='red')
     plt.plot(loss_tracker['iter'], loss_tracker['loss_v'], label=r'variational loss', color='blue')
     plt.legend(shadow=True, loc='upper left', fontsize=18, ncol=1)

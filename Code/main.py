@@ -19,6 +19,7 @@ with open('config.yml', 'r') as file:
 # Set random seeds
 np.random.seed(cfg['seed'])
 tf.random.set_seed(cfg['seed'])
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 # ..............................................................................
 
