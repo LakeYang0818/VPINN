@@ -1,12 +1,11 @@
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from typing import Any, Union, Tuple, Sequence
+from typing import Sequence
 
 # Local imports
-from .functions import diff_eq
 from .data_types import DataGrid, DataSet, Grid
-from .utils import rescale_quads
+from .test_functions import test_function
+from .var_forms import var_sum
 
 
 class VPINN(keras.Model):
@@ -15,8 +14,7 @@ class VPINN(keras.Model):
     VAR_FORMS = {1, 2, 3}
 
     EQUATION_TYPES = {
-        "Poisson1D",
-        "Poisson2D",
+        "Poisson",
         "Helmholtz",
         "Burger"
     }
@@ -28,14 +26,18 @@ class VPINN(keras.Model):
                  architecture: Sequence[int],
                  loss_weight: float,
                  learning_rate: float = 0.01,
-                 var_form: int,
-                 eq_type: str,
+                 var_form: int = 1,
+                 eq_type: str = 'Poisson',
                  activation: str = 'relu',
                  data_type: tf.DType = tf.dtypes.float64):
 
-        """Creates a new variational physics-informed neural network (VPINN).
+        """Creates a new variational physics-informed neural network (VPINN). The loss function contains both a
+        strong residual (the values of the network evaluated on training data) and a variational loss, calculated
+        by integrating the network against test functions over the domain.
+
         Args:
-             f_integrated :DataSet: the values of the external forcing integrated against all the test functions on the grid. It is used to calculate the
+             f_integrated :DataSet: the values of the external forcing integrated against all the test functions on the
+                grid. It is used to calculate the
                 variational loss. The coordinates of the DataSet are the test function numbers,
                 and the datasets are the values of the integrals.
             input_dim :int: the dimension of the input data
@@ -46,31 +48,24 @@ class VPINN(keras.Model):
             activation :str: the activation function of the neural net
             data_type :DType: the data type of the layer weights. Default is float64.
         Raises:
-            ValueError: if an invalid `type` argument is passed.
+            ValueError: if an invalid 'var_form' argument is passed.
+            ValueError: if an invalid 'eq_type' argument is passed
         """
 
-        if (var_form not in self.VAR_FORMS):
+        if var_form not in self.VAR_FORMS:
             raise ValueError(f"Unrecognized variational_form  "
-                             f"'{type[0]}'! "
-                             f"Choose from: {', '.join(self.VAR_FORMS)}")
+                             f"'{var_form}'! "
+                             f"Choose from: [1, 2, 3]")
 
-        if (eq_type not in self.EQUATION_TYPES):
+        if eq_type not in self.EQUATION_TYPES:
             raise ValueError(f"Unrecognized equation type "
-                             f"'{type[1]}'! "
+                             f"'{eq_type}'! "
                              f"Choose from: {', '.join(self.EQUATION_TYPES)}")
 
         super().__init__()
 
-        # The external forcing integrated over the grid against every test function
-        # This a two-dimensional array, where the outer dimension is the grid size and
-        # the inner dimension is the number of test functions (see below)
+        # The external forcing integrated against every test function over the entire grid
         self.f_integrated = f_integrated
-
-        # Number of grid elements
-        self.n_grid_elements = np.shape(self.f_integrated)[0]
-
-        # Number of test functions
-        self.n_test_functions = np.shape(self.f_integrated[0])[0]
 
         # Relative weight
         self.loss_weight = loss_weight
@@ -85,7 +80,7 @@ class VPINN(keras.Model):
 
         # Add layers with the specified architecture
         for i in range(len(architecture)):
-            print(f"Adding layer {i} of {len(architecture)} ...")
+            print(f"Adding layer {i + 1} of {len(architecture)} ...")
             if i == 0:
                 self.neural_net.add(keras.layers.Dense(architecture[i],
                                                        dtype=data_type,
@@ -106,10 +101,6 @@ class VPINN(keras.Model):
         # Get the optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
-        # Track the loss
-        self.train_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy()
-        self.val_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy()
-
     # ... Evaluation functions ...................................................................
 
     def evaluate(self, x: tf.Tensor) -> tf.Tensor:
@@ -117,9 +108,11 @@ class VPINN(keras.Model):
 
         return self.neural_net(x)
 
+    # @tf.function
     def grad_net(self, x: tf.Tensor) -> tf.Tensor:
         """Calculates the first derivative of the neural net.
         Returns a tf.Tensor of derivatives in each coordinate direction."""
+
         with tf.GradientTape() as tape:
             tape.watch(x)
             y = self.evaluate(x)
@@ -127,9 +120,11 @@ class VPINN(keras.Model):
 
         return grad
 
+    # @tf.function
     def gradgrad_net(self, x: tf.Tensor) -> tf.Tensor:
         """Calculates the second derivative of the neural net. Returns a tf.Tensor with
         the values of the second derivatives in each direction"""
+
         with tf.GradientTape() as tape:
             tape.watch(x)
             y = self.grad_net(x)
@@ -139,62 +134,85 @@ class VPINN(keras.Model):
 
     # ... Loss functions ...................................................................
 
-    @tf.function
-    def calculate_strong_residual(self, x: tf.Tensor, y_pred: tf.Tensor):
+    # @tf.function
+    def calculate_strong_residual(self, x: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
         """Calculates the strong residual on the training data, which are the values of the exact solution on the
         boundary.
         """
 
         return tf.math.reduce_mean(tf.math.squared_difference(self.evaluate(x), y_pred))
 
-    @tf.function
+    # @tf.function
     def calculate_variational_loss(self,
-                                   grid: Grid,
                                    quadrature_data: DataGrid,
-                                   n_test_functions: int):
-        """Calculates the variational loss on the grid points.
+                                   quadrature_data_scaled: Sequence[DataGrid],
+                                   jacobians: Sequence[float],
+                                   boundary: Sequence,
+                                   n_test_functions: int,
+                                   pde_params: dict = None) -> tf.Tensor:
+        """Calculates the total variational loss over the grid.
 
         Args:
-            grid :Grid: the domain of integration
             quadrature_data :DataGrid: the quadrature grid, containing grid points and corresponding weights
+            quadrature_data_scaled :Sequence[DataGrid]: the quadrature data scaled to each grid element
+            jacobians: the jacobians of the scaling transforms
             n_test_functions :int: the number of test functions against which to integrate
+            pde_params :dict: the constants used in the differential equation
+        Returns:
+            the variational loss
         """
-        # u_integrated = []
-        # for i in range(n_test_functions):
-        #     res = 0
-        #     for point in grid:
-        #         grid_element = ...
-        #         quads_rescaled = rescale_quads(quadrature_data, grid_element)
-        #         du = self.d_net(quads_rescaled)
-        #         ddu = self.dd_net(quads_rescaled)
-        #         res += integrate_u(du, ddu, quads_rescaled, grid_element, type)
-        #     u_integrated.append(res)
-        #
-        # return tf.math.reduce_mean(tf.math.squared_difference(u_integrated, self.f_integrated.data))
 
-        return tf.constant([0.5], dtype=self.data_type)
+        u_integrated = tf.stack([var_sum(u=self.evaluate, du=self.grad_net, ddu=self.gradgrad_net,
+                                         n_test_func=i, quads=quadrature_data, quads_scaled=quadrature_data_scaled,
+                                         jacobians=jacobians, grid_boundary=boundary,
+                                         var_form=self.var_form, eq_type=self.eq_type,
+                                         dtype=self.data_type, pde_params=pde_params)
+                                 for i in range(1, n_test_functions + 1)])
 
-    @tf.function
-    def compute_loss(self, x, y_pred, *, grid: Grid, quads: DataGrid, n_test_functions: int):
-        """Calculates the total loss, which is training loss + variational loss."""
+        return tf.math.reduce_mean(tf.math.squared_difference(u_integrated, self.f_integrated.data))
+
+    #@tf.function
+    def compute_loss(self, x, y_pred, *, quads: DataGrid, quads_scaled: Sequence[DataGrid], jacobians: Sequence[float],
+                     grid_boundary: Sequence, n_test_functions: int, pde_params: dict = None) -> tf.Tensor:
+        """Calculates the total loss, which is training loss + variational loss.
+
+        Args:
+            x: the input values
+            y_pred: the corresponding values to predict
+            quads: the quadrature data
+            quads_scaled: the quadrature data scaled to each grid element
+            jacobians: the jacobians of the scaling transforms
+            grid_boundary: the grid boundary
+            n_test_functions: the number of test functions to use
+            pde_params: the constants used in the differential equations
+        Return:
+            the total loss, where strong residual and variational loss are weighted
+        """
+
         loss_s = self.calculate_strong_residual(x, y_pred)
-        loss_v = self.calculate_variational_loss(grid, quads, n_test_functions)
-        loss = self.loss_weight * loss_s + loss_v
+        loss_v = self.calculate_variational_loss(quads, quads_scaled, jacobians,
+                                                 grid_boundary, n_test_functions, pde_params) if self.loss_weight > 0 \
+            else tf.constant([0])
 
-        return loss
+        return tf.add(tf.multiply(tf.constant([self.loss_weight], dtype=self.data_type), loss_s), loss_v)
 
     # ... Training function ...................................................................
 
-    @tf.function
-    def train(self, x, y, *, grid: Grid, quads: DataGrid, n_test_functions: int):
+    # @tf.function
+    def train(self, x, y, *, quads: DataGrid, quads_scaled: Sequence[DataGrid], jacobians: Sequence[float],
+              grid_boundary: Sequence, n_test_functions: int, pde_params: dict = None):
         """A single training step of the model"""
-        with tf.GradientTape() as tape:
 
+        if pde_params is None:
+            pde_params = {'Helmholtz': 1, 'Burger': 0}
+        with tf.GradientTape() as tape:
             # Logits for this minibatch, tracked by the tape
             logits = self.evaluate(x)
 
             # Compute the loss value for this minibatch.
-            loss = self.compute_loss(x, y,grid=grid, quads=quads, n_test_functions=n_test_functions)
+            loss = self.compute_loss(x, y, quads=quads, quads_scaled=quads_scaled, jacobians=jacobians,
+                                     grid_boundary=grid_boundary, n_test_functions=n_test_functions,
+                                     pde_params=pde_params)
 
         # Use the gradient tape to automatically retrieve
         # the gradients of the trainable variables with respect to the loss.
@@ -203,11 +221,6 @@ class VPINN(keras.Model):
         # Run one step of gradient descent by updating
         # the value of the variables to minimize the loss.
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
-        self.train_acc_metric.update_state(y, logits)
 
         return loss
 
-    @tf.function
-    def test_step(self, x, y):
-        val_logits = self.evaluate(x)
-        self.val_acc_metric.update_state(y, val_logits)

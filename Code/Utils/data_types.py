@@ -9,19 +9,21 @@ class Grid:
     """Grid type. A grid consists of pairs of x- and y values, which may have
     different dimensions.
     """
-    def __init__(self, *, x: Sequence[float] = None, y: Sequence[float] = None):
-
-        self._x = x if x is not None else []
+    def __init__(self, *, x: Sequence[float], y: Sequence[float] = None):
+        """Constructs a grid from coordinate arrays
+        x: the x coordinates
+        y: the y coordinates
+        Raises:
+            ValueError: if x is empty.
+        """
+        if x is None or not x:
+            raise ValueError('Cannot create an empty grid!')
+        self._x = x
         self._y = y if y is not None else []
-        if x is None and y is None:
-            self._data = []
-            self._boundary = []
-        elif x is not None and y is None:
+
+        if y is None:
             self._data = [[p] for p in x]
             self._boundary = [x[0], x[-1]]
-        elif x is None and y is not None:
-            self._data = [[p] for p in y]
-            self._boundary = [y[0], y[-1]]
         else:
             data = []
             for y_val in y:
@@ -36,8 +38,16 @@ class Grid:
                 boundary.append([x[0], p])
                 boundary.append([x[-1], p])
             self._boundary = boundary
+        self._size = len(self._data)
 
     # .. Magic methods ........................................................
+
+    def __getitem__(self, item):
+        return self._data[item]
+
+    def __iter__(self):
+        for i in range(self._size):
+            yield self._data[i]
 
     def __str__(self) -> str:
         output = f"Grid of size ({len(self._x)} x {len(self._y)})"
@@ -71,7 +81,7 @@ class Grid:
 
     @property
     def size(self):
-        return len(self._data)
+        return self._size
 
 
 class DataSet:
@@ -80,7 +90,7 @@ class DataSet:
      underlying coordinates, and the coordinate data for a given coordinate axis.
     """
 
-    def __init__(self, *, x: Sequence[Union[Sequence[float], float]], f: Sequence[float],
+    def __init__(self, *, x: Sequence[Union[Sequence[Union[int, float]], float]], f: Sequence[float],
                  as_tensor: bool = False, data_type: tf.DType = tf.dtypes.float64):
         """Initializes a DataSet object from a list of coordinates and corresponding data values.
 
@@ -120,6 +130,8 @@ class DataSet:
         else:
             self._data = f
         self._size = len(f)
+
+    # .. Magic methods ........................................................
 
     def __getitem__(self, item):
         return self._coords[item], self._data[item]
@@ -179,7 +191,15 @@ class DataGrid:
     """DataGrid type. A DataGrid consists of a grid and matching function values."""
 
     def __init__(self, *, x: Grid, f: Sequence[float]):
+        """Initializes a DataGrid object from a grid and corresponding data values.
 
+        Args:
+            x: the grid
+            f: the data values
+        Raises:
+            ValueError: when the coordinates and function values do not have equal dimensions
+            ValueError: when trying to initialize an empty DataSet
+        """
         if x.size != len(f):
             raise ValueError("x and f must be of same dimension!")
         if not x:
@@ -189,31 +209,50 @@ class DataGrid:
         self._x = x.x
         self._y = x.y
         self._dim = x.dim
+        self._size = len(f)
         self._data = f
 
     # .. Magic methods ........................................................
+
+    def __iter__(self):
+        for i in range(self._size):
+            yield self._grid.data[i], self._data[i]
+
+    def __getitem__(self, item):
+        return self._grid.data[item], self._data[item]
 
     def __str__(self) -> str:
         return (f"DataGrid on {self._grid.size} grid points on a {self._dim}-dimensional "
                 f"grid")
 
     # .. Properties ...........................................................
+
+    # Get the underlying grid
     @property
     def grid(self):
         return self._grid
 
+    # Get the function values
     @property
     def data(self):
         return self._data
 
+    # Get the x axis of the grid
     @property
     def x(self):
         return self._x
 
+    # Get the y axis of the grid
     @property
     def y(self):
         return self._y
 
+    # Get the grid dimension
     @property
     def dim(self):
         return self._dim
+
+    # Get the size of the dataset
+    @property
+    def size(self):
+        return self._size

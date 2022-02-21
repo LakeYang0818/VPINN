@@ -15,6 +15,7 @@ def test_function(point: Union[float, Sequence[float]], n) -> float:
     """Returns the test function evaluated at a grid point of arbitrary
     dimension. Higher dimensional test functions are simply products of
     1d test functions.
+
     Args:
         point :Union[Sequence, float]: the point at which to evaluate the test function
         n: the number of the test function

@@ -3,6 +3,7 @@ from scipy.special import jacobi
 import numpy as np
 import tensorflow as tf
 from typing import Any, Union, Sequence
+from functools import wraps
 
 # Local imports
 from Utils.data_types import Grid
@@ -14,13 +15,13 @@ from Utils.data_types import Grid
 # the same data type
 
 
-def adapt_input(func):
+def adapt_input(func=None):
     def evaluate(x: Union[float, Sequence[Sequence[float]], Grid], *args, **kwargs) -> Union[float, Sequence[float]]:
         if isinstance(x, Sequence):
             if isinstance(x[0], Sequence):
                 return [func(p, *args, **kwargs) for p in x]
             else:
-                return func(x)
+                return func(x, *args, **kwargs)
         elif isinstance(x, Grid):
             return [func(p, *args, **kwargs) for p in x.data]
         else:
@@ -33,10 +34,13 @@ def adapt_input(func):
 # Exact solution
 @adapt_input
 def u(x: Any) -> float:
-    res = 1
-    for coord in x:
-        res *= coord
-    return res
+    if isinstance(x, Sequence):
+        res = 1
+        for coord in x:
+            res *= coord
+        return res
+    else:
+        return x
 
 
 # External forcing
@@ -48,14 +52,17 @@ def f(x: Any) -> float:
             res *= coord
         return res
     else:
-        return x
-
+        r1 = 5
+        omega = 4 * np.pi
+        amp = 0.1
+        gtemp = -0.1 * (omega ** 2) * np.sin(omega * x) - (2 * r1 ** 2) * (np.tanh(r1 * x)) / ((np.cosh(r1 * x)) ** 2)
+        return -amp * gtemp
 
 # ... Test functions .......................................................
 # Recursive generation of the Jacobi polynomial of order n
 def jacobi_poly(x: Any, n: int, *, a: int, b: int) -> Union[float, Sequence[float]]:
     """Returns the Jacobi polynomial of order n"""
-    return jacobi(n, a, b)(np.array(x))
+    return jacobi(n, a, b)(x)
 
 
 def djacobi_poly(x: Any, n: int, *, d: int, a: int, b: int) -> Union[float, Sequence[float]]:
@@ -76,10 +83,3 @@ def test_function_1d(x: Any, n) -> Union[float, Sequence[float]]:
 def dtest_function_1d(x: Any, n: int, *, d: int) -> Union[float, Sequence[float]]:
     """Returns the derivative of the test function on a 1d grid"""
     return djacobi_poly(x, n, d=d, a=0, b=0) - djacobi_poly(x, n-1, d=d, a=0, b=0)
-
-
-def diff_eq(du, ddu, eq_type: str):
-    if eq_type == 'Poisson':
-        return ddu
-    else:
-        return tf.math.add_n(du + ddu)
