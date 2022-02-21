@@ -7,7 +7,6 @@ from .functions import u as u_exact
 from .test_functions import dtest_function, test_function
 from .utils import integrate_over_grid
 
-
 def integrate_Poisson(u, du, laplace, n_test_func, quads, quads_scaled, jacobians, grid_boundary, var_form,
                       dtype: tf.DType = tf.dtypes.float64) -> tf.Tensor:
     """Integrates variational forms of the Poisson equation over the grid against a particular test function,

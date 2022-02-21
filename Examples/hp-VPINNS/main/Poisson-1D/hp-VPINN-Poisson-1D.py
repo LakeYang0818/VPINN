@@ -81,19 +81,20 @@ class VPINN:
             u_NN_bound_element = self.net_u(x_b_element)
             d1test_bound_element, d2test_bounda_element = self.dTest_fcn(Ntest_element, np.array([[-1],[1]]))
 
-
             if var_form == 1:
-                U_NN_element = tf.reshape(tf.stack([-jacobian*tf.reduce_sum(self.wquad*d2u_NN_quad_element*test_quad_element[i]) \
-                +jacobian*k*tf.reduce_sum(self.wquad*u_NN_quad_element*test_quad_element[i]) \
-                                                   for i in range(Ntest_element)]),(-1,1))
-            elif var_form == 2:
-                U_NN_element = tf.reshape(tf.stack([ tf.reduce_sum(self.wquad*d1u_NN_quad_element*d1test_quad_element[i] \
-                +self.wquad*u_NN_quad_element*test_quad_element[i]) \
-                                                    for i in range(Ntest_element)]),(-1,1))
-            elif var_form == 3:
-                U_NN_element = tf.reshape(tf.stack([-1/jacobian*tf.reduce_sum(self.wquad*u_NN_quad_element*d2test_quad_element[i]) \
-                                                   +1/jacobian*tf.reduce_sum(u_NN_bound_element*np.array([-d1test_bound_element[i][0], d1test_bound_element[i][-1]]))  \
-                                                   for i in range(Ntest_element)]),(-1,1))
+                U_NN_element = tf.reshape(
+                    tf.stack([-jacobian * tf.reduce_sum(self.wquad * d2u_NN_quad_element * test_quad_element[i]) \
+                              for i in range(Ntest_element)]), (-1, 1))
+            if var_form == 2:
+                U_NN_element = tf.reshape(
+                    tf.stack([tf.reduce_sum(self.wquad * d1u_NN_quad_element * d1test_quad_element[i]) \
+                              for i in range(Ntest_element)]), (-1, 1))
+            if var_form == 3:
+                U_NN_element = tf.reshape(
+                    tf.stack([-1 / jacobian * tf.reduce_sum(self.wquad * u_NN_quad_element * d2test_quad_element[i]) \
+                              + 1 / jacobian * tf.reduce_sum(
+                        u_NN_bound_element * np.array([-d1test_bound_element[i][0], d1test_bound_element[i][-1]])) \
+                              for i in range(Ntest_element)]), (-1, 1))
 
 
             Res_NN_element = U_NN_element - F_ext_element
@@ -237,7 +238,7 @@ if __name__ == "__main__":
     Opt_Niter = 1000 + 1
     Opt_tresh = 2e-32
     var_form  = 1
-    N_Element = 3
+    N_Element = 1
     Net_layer = [1] + [60] * 4 + [1]
     N_testfcn = 60
     N_Quad = 80
@@ -260,7 +261,7 @@ if __name__ == "__main__":
 
     def f_ext(x):
         gtemp =  -0.1*(omega**2)*np.sin(omega*x) - (2*r1**2)*(np.tanh(r1*x))/((np.cosh(r1*x))**2)
-        return -amp*gtemp+k*u_ext(x)
+        return -amp*gtemp
 
     #++++++++++++++++++++++++++++
     NQ_u = N_Quad
@@ -401,7 +402,7 @@ if __name__ == "__main__":
     plt.plot(iteration, loss_his, 'gray')
     plt.tick_params( labelsize = 20)
     fig.set_size_inches(w=11,h=5.5)
-    plt.savefig('Results/loss_'+str(np.around(k, 3))+'_.pdf')
+    plt.savefig('Results/loss.pdf')
     #++++++++++++++++++++++++++++
 
     pnt_skip = 25
@@ -418,7 +419,7 @@ if __name__ == "__main__":
     plt.tick_params( labelsize = 20)
     legend = plt.legend(shadow=True, loc='upper left', fontsize=18, ncol = 1)
     fig.set_size_inches(w=11,h=5.5)
-    plt.savefig('Results/prediction_'+str(np.around(k, 3))+'_.pdf')
+    plt.savefig('Results/prediction.pdf')
     #++++++++++++++++++++++++++++
 
     fig, ax = plt.subplots()
@@ -433,5 +434,5 @@ if __name__ == "__main__":
     plt.plot(X_test, abs(u_test - u_pred), 'k')
     plt.tick_params( labelsize = 20)
     fig.set_size_inches(w=11,h=5.5)
-    plt.savefig('Results/error_'+str(np.around(k, 3))+'_.pdf')
+    plt.savefig('Results/error.pdf')
     #++++++++++++++++++++++++++++

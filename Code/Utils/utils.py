@@ -1,13 +1,42 @@
-from typing import Sequence, Union
 import tensorflow as tf
+from typing import Sequence, Union
 import numpy as np
 from pyDOE import lhs
 
 from .data_types import DataGrid, Grid
-from .test_functions import GaussLobattoJacobiWeights, test_function
+from .test_functions import GaussLobattoJacobiWeights
+
+def validate_cfg(cfg: dict):
+    """Checks the configuration settings are valid to prevent cryptic errors"""
+
+    dim: int = cfg['space']['dimension']
+    if dim not in {1, 2}:
+        raise ValueError(f'Argument {dim} not supported! Dimension must be either 1 or 2!')
+    if dim == 1:
+        if cfg['PDE']['type'] == 'Burger':
+            raise TypeError('The Burgers equation requires a two-dimensional grid!')
+        if isinstance(cfg['space']['grid_size'], Sequence):
+            raise TypeError('The grid size should be a scalar! Adjust the config.')
+        if isinstance(cfg['N_quad'], Sequence):
+            raise TypeError('The number of quadrature points should be a scalar! Adjust the config.')
+        if cfg['N_quad'] < 3:
+            raise ValueError('Need at least three quadrature points! Increase N_quad.')
+        if cfg['space']['grid_size'] == 1:
+            raise ValueError("Grid size should be at least 2! Increase grid size.")
+    else:
+        if not isinstance(cfg['space']['grid_size'], Sequence):
+            raise TypeError('The grid size must be a sequence of the form [n_y, n_x]! '
+                            'Adjust the config.')
+        if not isinstance(cfg['N_quad'], Sequence):
+            raise TypeError('The number of quadrature points must be a sequence of the form [n_y, n_x]! '
+                            'Adjust the config.')
+        if 3 in cfg['N_quad']:
+            raise ValueError('Need at least three quadrature points! Increase N_quad.')
+        if 1 in cfg['space']['grid_size']:
+            raise ValueError("Grid size should be at least 2! Increase grid size.")
 
 
-def get_grid(boundary: Sequence[float], grid_size: int, *, dtype: tf.DType = tf.dtypes.float64) -> Grid:
+def grid_1d(boundary: Sequence[float], grid_size: int, *, dtype: tf.DType = tf.dtypes.float64) -> Grid:
     """Constructs a one-dimensional grid.
     Args:
         boundary :Sequence: the boundaries of the grid
@@ -37,13 +66,13 @@ def construct_grid(dim: int,
         a Grid of the given values
     """
     if dim == 1:
-        g: Grid = get_grid(boundary, grid_size, dtype=dtype)
+        g: Grid = grid_1d(boundary, grid_size, dtype=dtype)
 
         return Grid(x=g.x)
 
     elif dim == 2:
-        x: Grid = get_grid(boundary[0], grid_size[0], dtype=dtype)
-        y: Grid = get_grid(boundary[1], grid_size[1], dtype=dtype)
+        x: Grid = grid_1d(boundary[0], grid_size[0], dtype=dtype)
+        y: Grid = grid_1d(boundary[1], grid_size[1], dtype=dtype)
 
         return Grid(x=x.x, y=y.x)
 
@@ -124,21 +153,15 @@ def scale_quadrature_data(grid: Grid, quads: DataGrid) -> (Sequence[DataGrid], S
     if grid.dim == 1:
         for i in range(len(grid.x) - 1):
             element = [grid.x[i], grid.x[i + 1]]
-            jac = jacobian(element)
-            quads_rescaled = rescale_quads(quads, grid.dim, domain=element)
-
-            quads_scaled.append(quads_rescaled)
-            jacobians.append(jac)
+            quads_scaled.append(rescale_quads(quads, grid.dim, domain=element))
+            jacobians.append(jacobian(element))
 
     elif grid.dim == 2:
         for j in range(len(grid.y) - 1):
             for i in range(len(grid.x) - 1):
                 element = [[grid.x[i], grid.x[i + 1]], [grid.y[j], grid.y[j + 1]]]
-                jac = jacobian(element)
-                quads_rescaled = rescale_quads(quads, grid.dim, domain=element)
-
-                quads_scaled.append(quads_rescaled)
-                jacobians.append(jac)
+                quads_scaled.append(rescale_quads(quads, grid.dim, domain=element))
+                jacobians.append(jacobian(element))
 
     return quads_scaled, jacobians
 
@@ -151,7 +174,7 @@ def integrate_over_grid(func, test_func, quads: DataGrid, quads_scaled: Sequence
         func: the function to integrate
         test_func: the test function to use. Test function and function are multiplied using the dot product
         quads: the quadrature data over which to integrate
-        quads: the quadrature data scaled to each element of the grid
+        quads_scaled: the quadrature data scaled to each element of the grid
         jacobians: the jacobians of the coordinate transforms
         as_tensor: whether to use tf.Tensors for the function input, and whether to return tf.Tensor types
         dtype: the data type to use for the tensors

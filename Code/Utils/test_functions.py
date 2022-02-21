@@ -60,39 +60,6 @@ def dtest_function(point: Union[float, Sequence[float]], n, *, d: int) -> Union[
         return dtest_function_1d(point, n, d=d)
 
 
-def dtest_function_list(point: Sequence[Sequence[Any]], n, *, d: list) -> Sequence[Sequence[Any]]:
-    """Calculates derivative of all orders from a given list for the test function at a point.
-     This speeds things up considerably when both are required, as one only has to iterate over
-     the grid once.
-
-    Args:
-        point :Union[Sequence, float]: the grid of coordinates
-        n :int: the number of the test function
-        d :list: a list of the order of the derivatives. If the list only has one item, the derivative of that order is
-                 returned
-    Returns:
-        a list of lists of partial derivatives along each coordinate direction at each grid point.
-    """
-    res: list = []
-    for order in d:
-        df = []
-        if isinstance(point, Sequence):
-            for i in range(len(point)):
-                df_i = dtest_function_1d(point[i], n, d=order)
-                for j in range(len(point)):
-                    if j == i:
-                        continue
-                    else:
-                        df_i *= test_function_1d(point[j], n)
-                df.append(df_i)
-            res.append(df)
-        else:
-            df.append(dtest_function_1d(point, n, d=order))
-        res.append(df)
-
-    return res
-
-
 def GaussLobattoJacobiWeights(q: int, *, a: int, b: int, dtype: tf.DType = tf.dtypes.float64) -> DataGrid:
     """Returns one-dimensional quadrature weights"""
     x = [tf.cast(r, dtype).numpy() for r in roots_jacobi(q-2, a+1, b+1)[0]]

@@ -1,10 +1,9 @@
 import tensorflow as tf
 from tensorflow import keras
-from typing import Sequence
+from typing import Any, Sequence
 
 # Local imports
-from .data_types import DataGrid, DataSet, Grid
-from .test_functions import test_function
+from .data_types import DataGrid, DataSet
 from .var_forms import var_sum
 
 
@@ -21,6 +20,11 @@ class VPINN(keras.Model):
 
     def __init__(self,
                  f_integrated: DataSet,
+                 quadrature_data: DataGrid,
+                 quadrature_data_scaled: Sequence[DataGrid],
+                 jacobians: Sequence,
+                 boundary: Sequence,
+                 n_test_functions: int,
                  *,
                  input_dim: int,
                  architecture: Sequence[int],
@@ -28,7 +32,8 @@ class VPINN(keras.Model):
                  learning_rate: float = 0.01,
                  var_form: int = 1,
                  eq_type: str = 'Poisson',
-                 activation: str = 'relu',
+                 pde_params: dict = None,
+                 activation: Any,
                  data_type: tf.DType = tf.dtypes.float64):
 
         """Creates a new variational physics-informed neural network (VPINN). The loss function contains both a
@@ -36,16 +41,21 @@ class VPINN(keras.Model):
         by integrating the network against test functions over the domain.
 
         Args:
-             f_integrated :DataSet: the values of the external forcing integrated against all the test functions on the
+            f_integrated :DataSet: the values of the external forcing integrated against all the test functions on the
                 grid. It is used to calculate the
                 variational loss. The coordinates of the DataSet are the test function numbers,
                 and the datasets are the values of the integrals.
+            quadrature_data: the quadrature points
+            quadrature_data_scaled: the quadrature points scaled to the grid
+            jacobians: the jacobians of the coordinate transforms
+            n_test_functions: the number of test functions to use
             input_dim :int: the dimension of the input data
             architecture :Sequence: the neural net architecture
             loss_weight :float: the relative weight of the strong residual to variational residual
             var_form :int: the variational form to use
             eq_type :str: the equation type
-            activation :str: the activation function of the neural net
+            pde_params: the pde parameters
+            activation: the activation function of the neural net
             data_type :DType: the data type of the layer weights. Default is float64.
         Raises:
             ValueError: if an invalid 'var_form' argument is passed.
@@ -62,53 +72,86 @@ class VPINN(keras.Model):
                              f"'{eq_type}'! "
                              f"Choose from: {', '.join(self.EQUATION_TYPES)}")
 
-        super().__init__()
+        super(VPINN, self).__init__()
 
         # The external forcing integrated against every test function over the entire grid
-        self.f_integrated = f_integrated
+        self._f_integrated = f_integrated
+
+        # The quadrature data
+        self._quadrature_data = quadrature_data
+        self._quadrature_data_scaled = quadrature_data_scaled
+
+        # The coordinate transform jacobians
+        self._jacobians = jacobians
+
+        # The grid boundary
+        self._boundary = boundary
+        self._n_test_functions = n_test_functions
 
         # Relative weight
-        self.loss_weight = loss_weight
+        self._loss_weight = loss_weight
 
-        # Variational form and equation type
-        self.var_form = var_form
-        self.eq_type = eq_type
+        # Variational form, equation type and equation params
+        self._var_form = var_form
+        self._eq_type = eq_type
+        self._pde_params = pde_params
 
         # Initialise the net
         xavier = tf.keras.initializers.GlorotUniform()
-        self.neural_net = keras.Sequential()
+        self._neural_net = keras.Sequential()
 
         # Add layers with the specified architecture
         for i in range(len(architecture)):
             print(f"Adding layer {i + 1} of {len(architecture)} ...")
             if i == 0:
-                self.neural_net.add(keras.layers.Dense(architecture[i],
-                                                       dtype=data_type,
-                                                       kernel_initializer=xavier,
-                                                       input_dim=input_dim,
-                                                       activation=activation))
+                self._neural_net.add(tf.keras.Input(shape=(architecture[i],)))
+                self._neural_net.add(keras.layers.Dense(architecture[i],
+                                                        dtype=data_type,
+                                                        kernel_initializer=xavier,
+                                                        input_dim=input_dim,
+                                                        activation=activation))
 
             else:
-                self.neural_net.add(keras.layers.Dense(architecture[i],
-                                                       dtype=data_type,
-                                                       kernel_initializer=xavier,
-                                                       activation=activation))
-        self.dropout = keras.layers.Dropout(0.5)
-        self.neural_net.summary()
+                self._neural_net.add(keras.layers.Dense(architecture[i],
+                                                        dtype=data_type,
+                                                        kernel_initializer=xavier,
+                                                        activation=activation))
 
-        self.data_type = data_type
+        self._neural_net.summary()
+
+        self._data_type = data_type
 
         # Get the optimizer
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        self._optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+
+        # Initialize the loss tracker
+        self._loss_tracker: dict = {'iter': [],
+                                    'total_loss': [],
+                                    'loss_b': [],
+                                    'loss_v': []}
 
     # ... Evaluation functions ...................................................................
 
-    def evaluate(self, x: tf.Tensor) -> tf.Tensor:
+    # Return the model loss values
+    @property
+    def loss_tracker(self) -> dict:
+        return self._loss_tracker
+
+    def update_loss_tracker(self, it, total_loss, loss_b, loss_v):
+        self._loss_tracker['iter'].append(it)
+        self._loss_tracker['total_loss'].append(total_loss)
+        self._loss_tracker['loss_b'].append(loss_b)
+        self._loss_tracker['loss_v'].append(loss_v)
+
+    # ... Evaluation functions ...................................................................
+
+    @tf.function
+    def evaluate(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         """Evaluates the neural net"""
 
-        return self.neural_net(x)
+        return self._neural_net(x, training=training)
 
-    # @tf.function
+    @tf.function
     def grad_net(self, x: tf.Tensor) -> tf.Tensor:
         """Calculates the first derivative of the neural net.
         Returns a tf.Tensor of derivatives in each coordinate direction."""
@@ -120,7 +163,7 @@ class VPINN(keras.Model):
 
         return grad
 
-    # @tf.function
+    @tf.function
     def gradgrad_net(self, x: tf.Tensor) -> tf.Tensor:
         """Calculates the second derivative of the neural net. Returns a tf.Tensor with
         the values of the second derivatives in each direction"""
@@ -132,95 +175,49 @@ class VPINN(keras.Model):
 
         return gradgrad
 
-    # ... Loss functions ...................................................................
+    # ... Loss function ...................................................................
 
-    # @tf.function
-    def calculate_strong_residual(self, x: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
-        """Calculates the strong residual on the training data, which are the values of the exact solution on the
-        boundary.
-        """
-
-        return tf.math.reduce_mean(tf.math.squared_difference(self.evaluate(x), y_pred))
-
-    # @tf.function
-    def calculate_variational_loss(self,
-                                   quadrature_data: DataGrid,
-                                   quadrature_data_scaled: Sequence[DataGrid],
-                                   jacobians: Sequence[float],
-                                   boundary: Sequence,
-                                   n_test_functions: int,
-                                   pde_params: dict = None) -> tf.Tensor:
-        """Calculates the total variational loss over the grid.
-
-        Args:
-            quadrature_data :DataGrid: the quadrature grid, containing grid points and corresponding weights
-            quadrature_data_scaled :Sequence[DataGrid]: the quadrature data scaled to each grid element
-            jacobians: the jacobians of the scaling transforms
-            n_test_functions :int: the number of test functions against which to integrate
-            pde_params :dict: the constants used in the differential equation
-        Returns:
-            the variational loss
-        """
+    def calculate_variational_loss(self) -> tf.Tensor:
+        """Calculates the total variational loss over the grid."""
 
         u_integrated = tf.stack([var_sum(u=self.evaluate, du=self.grad_net, ddu=self.gradgrad_net,
-                                         n_test_func=i, quads=quadrature_data, quads_scaled=quadrature_data_scaled,
-                                         jacobians=jacobians, grid_boundary=boundary,
-                                         var_form=self.var_form, eq_type=self.eq_type,
-                                         dtype=self.data_type, pde_params=pde_params)
-                                 for i in range(1, n_test_functions + 1)])
+                                         n_test_func=i, quads=self._quadrature_data,
+                                         quads_scaled=self._quadrature_data_scaled,
+                                         jacobians=self._jacobians, grid_boundary=self._boundary,
+                                         var_form=self._var_form, eq_type=self._eq_type,
+                                         dtype=self._data_type, pde_params=self._pde_params)
+                                 for i in range(1, self._n_test_functions + 1)])
 
-        return tf.math.reduce_mean(tf.math.squared_difference(u_integrated, self.f_integrated.data))
+        return tf.math.reduce_mean(tf.math.squared_difference(u_integrated, self._f_integrated.data))
 
-    #@tf.function
-    def compute_loss(self, x, y_pred, *, quads: DataGrid, quads_scaled: Sequence[DataGrid], jacobians: Sequence[float],
-                     grid_boundary: Sequence, n_test_functions: int, pde_params: dict = None) -> tf.Tensor:
-        """Calculates the total loss, which is training loss + variational loss.
+    # ... Model training ...................................................................
 
-        Args:
-            x: the input values
-            y_pred: the corresponding values to predict
-            quads: the quadrature data
-            quads_scaled: the quadrature data scaled to each grid element
-            jacobians: the jacobians of the scaling transforms
-            grid_boundary: the grid boundary
-            n_test_functions: the number of test functions to use
-            pde_params: the constants used in the differential equations
-        Return:
-            the total loss, where strong residual and variational loss are weighted
-        """
+    def train(self, training_data: DataSet, n_iterations: int):
+        """Trains the model using a training DataSet, for n_iterations."""
 
-        loss_s = self.calculate_strong_residual(x, y_pred)
-        loss_v = self.calculate_variational_loss(quads, quads_scaled, jacobians,
-                                                 grid_boundary, n_test_functions, pde_params) if self.loss_weight > 0 \
-            else tf.constant([0])
+        loss_v = self.calculate_variational_loss()
 
-        return tf.add(tf.multiply(tf.constant([self.loss_weight], dtype=self.data_type), loss_s), loss_v)
+        for it in range(n_iterations):
+            for _, (x_train, y_train) in enumerate(training_data):
+                with tf.GradientTape() as tape:
+                    loss_b = tf.math.reduce_mean(
+                        tf.math.squared_difference(self.evaluate(x_train, training=True),
+                                                   y_train))
+                    loss = tf.add(tf.multiply(tf.constant([self._loss_weight], dtype=self._data_type),
+                                              loss_b), loss_v)
+                    tape.watch(x_train)
+                grads = tape.gradient(loss, self.trainable_variables)
 
-    # ... Training function ...................................................................
+                # Update the loss tracker
+                self.update_loss_tracker(it, loss, loss_b, loss_v)
 
-    # @tf.function
-    def train(self, x, y, *, quads: DataGrid, quads_scaled: Sequence[DataGrid], jacobians: Sequence[float],
-              grid_boundary: Sequence, n_test_functions: int, pde_params: dict = None):
-        """A single training step of the model"""
+                # Run one step of gradient descent by updating
+                # the value of the variables to minimize the loss.
+                self._optimizer.apply_gradients(zip(grads, self.trainable_variables))
 
-        if pde_params is None:
-            pde_params = {'Helmholtz': 1, 'Burger': 0}
-        with tf.GradientTape() as tape:
-            # Logits for this minibatch, tracked by the tape
-            logits = self.evaluate(x)
+            # Update the variational loss every 10 iterations
+            if it % 10 == 0:
+                loss_v = self.calculate_variational_loss()
 
-            # Compute the loss value for this minibatch.
-            loss = self.compute_loss(x, y, quads=quads, quads_scaled=quads_scaled, jacobians=jacobians,
-                                     grid_boundary=grid_boundary, n_test_functions=n_test_functions,
-                                     pde_params=pde_params)
-
-        # Use the gradient tape to automatically retrieve
-        # the gradients of the trainable variables with respect to the loss.
-        grads = tape.gradient(loss, self.trainable_weights)
-
-        # Run one step of gradient descent by updating
-        # the value of the variables to minimize the loss.
-        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
-
-        return loss
-
+            if it % 100 == 0:
+                print(f"Current loss at iteration {it}: {loss.numpy()[0]:.4f}.")

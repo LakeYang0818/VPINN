@@ -34,13 +34,23 @@ def adapt_input(func=None):
 # Exact solution
 @adapt_input
 def u(x: Any) -> float:
+    # 2d case
     if isinstance(x, Sequence):
         res = 1
         for coord in x:
-            res *= coord
+            r1 = 5
+            omega = 4 * np.pi
+            amp = 1
+            utemp = 0.1 * np.sin(omega * coord) + np.tanh(r1 * coord)
+            res *= amp * utemp
         return res
     else:
-        return x
+        r1 = 5
+        omega = 4 * np.pi
+        amp = 1
+        utemp = 0.1 * np.sin(omega * x) + np.tanh(r1 * x)
+        return amp * utemp
+
 
 
 # External forcing
@@ -49,14 +59,19 @@ def f(x: Any) -> float:
     if isinstance(x, Sequence):
         res = 1
         for coord in x:
-            res *= coord
+            omega = 4 * np.pi
+            r1 = 5
+            amp = 1
+            gtemp = -0.1 * (omega ** 2) * np.sin(omega * coord) - (2 * r1 ** 2) * (np.tanh(r1 * coord)) / (
+                        (np.cosh(r1 * coord)) ** 2)
+            res *= -amp * gtemp
         return res
     else:
-        r1 = 5
         omega = 4 * np.pi
-        amp = 0.1
+        r1 = 5
+        amp = 1
         gtemp = -0.1 * (omega ** 2) * np.sin(omega * x) - (2 * r1 ** 2) * (np.tanh(r1 * x)) / ((np.cosh(r1 * x)) ** 2)
-        return -amp * gtemp
+        return -amp*gtemp
 
 # ... Test functions .......................................................
 # Recursive generation of the Jacobi polynomial of order n

@@ -60,7 +60,7 @@ file. They are all subscriptable and iterable.
 
 #### The `Grid` class:
 ```python
-class Grid(self, *, x: Sequence = None, y: Sequence = None)
+class Grid(*, x: Sequence = None, y: Sequence = None)
 ```
 This implements a grid from a list of coordinates. A grid can be either one- or two-dimensional, 
 depending on how many arguments are passed. Grid attributes can be easily accessed via several useful
@@ -70,7 +70,7 @@ dimension of the grid, and ```grid.size``` returns the number of points it conta
 
 #### The `DataSet` class:
 ```python
-class DataSet(self, *, x: Sequence, f: Sequence,
+class DataSet(*, x: Sequence, f: Sequence,
               as_tensor: bool = False, data_type: tf.DType = tf.dtypes.float64)
 ```
 The `DataSet` class is similar in syntax to `pandas.DataFrame`, but allowing for compatibility with 
@@ -82,7 +82,7 @@ a particular axis via `DataSet.axis()`, as well as the shorthands `DataSet.x` an
 
 #### The `DataGrid` class:
 ```python
-class DataGrid(self, *, x: Grid, f: Sequence)
+class DataGrid(*, x: Grid, f: Sequence)
 ```
 Combines function values on an underlying `Grid`. Access the grid via `DataGrid.grid` and the data values via 
 `DataGrid.data`. As before, `DataGrid.x`, `DataGrid.y`, `DataGrid.dim` and `DataGrid.size` are all possible.
