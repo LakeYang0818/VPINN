@@ -2,10 +2,10 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from typing import Any, Sequence
+import time
 
 # Local imports
 from .data_types import DataGrid, DataSet
-from .var_forms import var_sum
 
 
 class VPINN(keras.Model):
@@ -25,6 +25,8 @@ class VPINN(keras.Model):
                  quadrature_data_scaled: Sequence[DataGrid],
                  jacobians: Sequence,
                  boundary: Sequence,
+                 training_data: DataSet,
+                 test_funcs_evaluated: DataSet,
                  *,
                  input_dim: int,
                  architecture: Sequence[int],
@@ -79,7 +81,8 @@ class VPINN(keras.Model):
 
         # The quadrature data
         self._quadrature_data = quadrature_data
-        self._quadrature_data_scaled = quadrature_data_scaled
+        self._quadrature_data_scaled = quadrature_data_scaled  # TO DO: needs to be converted into a tensor
+        # x = tf.convert_to_tensor(self._quadrature_data_scaled[0].grid.data)
 
         # The coordinate transform jacobians
         self._jacobians = jacobians
@@ -87,8 +90,14 @@ class VPINN(keras.Model):
         # The grid boundary
         self._boundary = boundary
 
+        # Training data
+        self._training_data = training_data
+
+        # Test functions evaluated on the entire grid
+        self._test_functions_evaluated = test_funcs_evaluated
+
         # Relative weight
-        self._loss_weight = loss_weight
+        self._loss_weight = tf.cast(loss_weight, data_type)
 
         # Variational form, equation type and equation params
         self._var_form = var_form
@@ -102,22 +111,24 @@ class VPINN(keras.Model):
         for i in range(len(architecture)):
             print(f"Adding layer {i + 1} of {len(architecture)} ...")
             if i == 0:
-                self._neural_net.add(tf.keras.Input(shape=(architecture[i],)))
                 self._neural_net.add(keras.layers.Dense(architecture[i],
                                                         dtype=data_type,
                                                         kernel_initializer=tf.keras.initializers.TruncatedNormal(
-                                                            stddev=np.sqrt(2/(architecture[i]+architecture[i+1]), dtype=np.float64)
+                                                            stddev=np.sqrt(2 / (architecture[i] + architecture[i + 1]),
+                                                                           dtype=np.float64)
                                                         ),
                                                         bias_initializer=tf.keras.initializers.Zeros(),
                                                         input_dim=input_dim,
                                                         activation=activation))
-
-            elif i < len(architecture)-1:
+            # Hidden layers
+            elif i < len(architecture) - 1:
                 self._neural_net.add(keras.layers.Dense(architecture[i],
                                                         dtype=data_type,
                                                         kernel_initializer=tf.keras.initializers.TruncatedNormal(
-                                                            stddev=np.sqrt(2/(architecture[i]+architecture[i+1]), dtype=np.float64)
+                                                            stddev=np.sqrt(2 / (architecture[i] + architecture[i + 1]),
+                                                                           dtype=np.float64)
                                                         ),
+                                                        input_dim = architecture[i-1],
                                                         bias_initializer=tf.keras.initializers.Zeros(),
                                                         activation=activation))
             # Add output layer
@@ -125,10 +136,11 @@ class VPINN(keras.Model):
                 self._neural_net.add(keras.layers.Dense(architecture[-1],
                                                         dtype=data_type,
                                                         kernel_initializer=tf.keras.initializers.TruncatedNormal(
-                                                            stddev=np.sqrt(2/(architecture[i-1]+architecture[i]), dtype=np.float64)
+                                                            stddev=np.sqrt(2 / (1 + architecture[i]),
+                                                                           dtype=np.float64)
                                                         ),
+                                                        input_dim=architecture[i - 1],
                                                         bias_initializer=tf.keras.initializers.Zeros(),
-                                                        input_dim=architecture[-2],
                                                         activation='linear'))
         self._neural_net.summary()
 
@@ -158,8 +170,7 @@ class VPINN(keras.Model):
 
     # ... Evaluation functions ...................................................................
 
-    @tf.function
-    def evaluate(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def evaluate(self, x: tf.Tensor, training: bool = True) -> tf.Tensor:
         """Evaluates the neural net"""
 
         return self._neural_net(x, training=training)
@@ -168,8 +179,7 @@ class VPINN(keras.Model):
     def grad_net(self, x: tf.Tensor) -> tf.Tensor:
         """Calculates the first derivative of the neural net.
         Returns a tf.Tensor of derivatives in each coordinate direction."""
-
-        with tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape:
+        with tf.GradientTape() as tape:
             tape.watch(x)
             y = self.evaluate(x)
         grad = tape.gradient(y, x)
@@ -181,68 +191,67 @@ class VPINN(keras.Model):
         """Calculates the second derivative of the neural net. Returns a tf.Tensor with
         the values of the second derivatives in each direction"""
 
-        with tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape:
-            tape.watch(x)
+        with tf.GradientTape() as g:
+            g.watch(x)
             y = self.grad_net(x)
-        gradgrad = tape.gradient(y, x)
+        gradgrad = g.gradient(y, x)
 
         return gradgrad
 
-    # ... Loss function ...................................................................
-    def calculate_variational_loss(self, *, n_test_func) -> tf.Tensor:
-        """Calculates the total variational loss over the grid."""
+    # ... Loss functions ...................................................................
 
-        u_integrated = var_sum(u=self.evaluate, du=self.grad_net, ddu=self.gradgrad_net,
-                                         n_test_func=n_test_func, quads=self._quadrature_data,
-                                         quads_scaled=self._quadrature_data_scaled,
-                                         jacobians=self._jacobians, grid_boundary=self._boundary,
-                                         var_form=self._var_form, eq_type=self._eq_type,
-                                         dtype=self._data_type, pde_params=self._pde_params)
-
-        return tf.math.squared_difference(u_integrated, self._f_integrated.data[n_test_func])
-
-    def calculate_boundary_loss(self, training_data: DataSet) -> tf.Tensor:
+    def calculate_boundary_loss(self) -> tf.Tensor:
+        """Calculate the loss on the domain boundary"""
         total_loss = tf.stack([
-            tf.math.squared_difference(self.evaluate(x_train, training=True), y_train)
-        for _, (x_train, y_train) in enumerate(training_data)])
+            tf.math.squared_difference(self.evaluate(x_train), y_train)
+            for _, (x_train, y_train) in enumerate(self._training_data)])
+
         return tf.math.reduce_mean(total_loss)
 
-    def calculate_loss(self, *, x, y):
+    ### WIP
+    def calculate_variational_loss(self, ddu, n):
+        """Calculate the loss on the domain boundary"""
 
-        loss_b = self.calculate_boundary_loss(x=x, y=y)
-        loss_v = self.calculate_variational_loss()
-        loss = tf.add(tf.multiply(tf.constant([self._loss_weight], dtype=self._data_type), loss_b), loss_v)
+        # This is just Poisson 1d for now
+        s = tf.reduce_sum(
+            tf.scalar_mul(-1,
+                   tf.math.multiply(ddu[0], test_function(grid.data, n))           )
 
-        return loss
+        return (tf.math.squared_difference(s, tf.convert_to_tensor(self._f_integrated.data[n])))
+
+
+    @tf.function
+    def training_step(self):
+        """A single training step"""
+
+        # WIP: This only works for 1D
+        x = tf.convert_to_tensor(self._quadrature_data_scaled[0].grid.data, dtype=self._data_type)
+        loss_v = tf.constant(0, dtype=self._data_type)
+        loss = tf.constant(0, dtype=self._data_type)
+        with tf.GradientTape(watch_accessed_variables=True) as tape:
+            tape.watch(loss)
+            ddu = self.gradgrad_net(x)
+            loss_b = self.calculate_boundary_loss()
+
+            for i in range(0, self._n_test_functions):
+                loss_v += self.calculate_variational_loss(ddu, i)
+            loss = loss_b + tf.cast(self._loss_weight / self._n_test_functions, dtype=self._data_type) * loss_v
+
+        grad = tape.gradient(loss, self.trainable_variables)
+        self._optimizer.apply_gradients(zip(grad, self.trainable_variables))
+        return loss, loss_b, loss_v/self._n_test_functions
 
     # ... Model training ...................................................................
-    def train(self, training_data: DataSet, n_iterations: int):
-        """Trains the model using a training DataSet, for n_iterations."""
+    def train(self, n_iterations: int):
+        """Trains the model using for n_iterations."""
 
+        start_time = time.time()
         for it in range(n_iterations):
-            with tf.GradientTape() as tape:
-                loss_b = self.calculate_boundary_loss(training_data)
-                loss_v = 0
-                for i in range(1, self._n_test_functions):
-                    loss_v += self.calculate_variational_loss(n_test_func=i)
-                loss = loss_b + self._loss_weight*loss_v
-            grads = tape.gradient(loss, self.trainable_variables)
-
-            self._optimizer.apply_gradients(zip(grads, self.trainable_variables))
-            if it % 10==0:
+            loss, loss_b, loss_v = self.training_step()
+            if it % 10 == 0:
                 self.update_loss_tracker(it, loss, loss_b, loss_v)
-                print(f"Current iteration: {it}; loss: {loss}")
-            # Update the variational loss every 10 iterations
-            # if it % 10 == 0:
-            #     with tf.GradientTape() as tape:
-            #
-            #         loss_v = self.calculate_variational_loss()
-            #
-            #     grads = tape.gradient(loss_v, self.trainable_variables)
-            #     loss = tf.add(tf.multiply(tf.constant([self._loss_weight], dtype=self._data_type),
-            #                               loss_b), loss_v)
-            #     self._optimizer.apply_gradients(zip(grads, self.trainable_variables))
-            #     self.update_loss_tracker(it, loss, loss_b, loss_v)
-
             if it % 100 == 0:
-                print(f"Current iteration: {it}; loss: {loss}")
+                print(f"Current iteration: {it}; time: {(time.time() - start_time):.4f}; "
+                      f"loss total: {loss} "
+                      f"loss_b: {loss_b} "
+                      f"loss_v: {loss_v}")

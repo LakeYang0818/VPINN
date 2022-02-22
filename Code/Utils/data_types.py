@@ -9,34 +9,56 @@ class Grid:
     """Grid type. A grid consists of pairs of x- and y values, which may have
     different dimensions.
     """
-    def __init__(self, *, x: Sequence[float], y: Sequence[float] = None):
+    def __init__(self, *, x: Sequence[float], y: Sequence[float] = None,
+                 as_tensor: bool = False, dtype: tf.DType = tf.dtypes.float64):
         """Constructs a grid from coordinate arrays
         x: the x coordinates
         y: the y coordinates
+        as_tensor: whether to return the grid objects as tf.Tensors
+        dtpye: the data type to use
         Raises:
             ValueError: if x is empty.
         """
         if x is None or not x:
             raise ValueError('Cannot create an empty grid!')
-        self._x = x
-        self._y = y if y is not None else []
+        if not as_tensor:
+            self._x = x
+            self._y = y if y is not None else []
+        else:
+            self._x = [tf.constant([pt], dtype=dtype) for pt in x]
+            self._y = [] if y is None else [tf.constant([pt], dtype=dtype) for pt in y]
 
         if y is None:
-            self._data = [[p] for p in x]
-            self._boundary = [x[0], x[-1]]
+            if not as_tensor:
+                self._data = [[p] for p in x]
+                self._boundary = [x[0], x[-1]]
+            else:
+                self._data = [tf.constant([p], dtype=dtype) for p in x]
+                self._boundary = [tf.constant(x[0], dtype=dtype), tf.constant(x[-1], dtype=dtype)]
         else:
             data = []
             for y_val in y:
                 for x_val in x:
-                    data.append([x_val, y_val])
+                    if not as_tensor:
+                        data.append([x_val, y_val])
+                    else:
+                        data.append(tf.constant([[x_val, y_val]], dtype=dtype))
             self._data = data
             boundary = []
             for p in x:
-                boundary.append([p, y[0]])
-                boundary.append([p, y[-1]])
+                if not as_tensor:
+                    boundary.append([p, y[0]])
+                    boundary.append([p, y[-1]])
+                else:
+                    boundary.append(tf.constant([[p, y[0]]], dtype=dtype))
+                    boundary.append(tf.constant([[p, y[-1]]], dtype=dtype))
             for p in y:
-                boundary.append([x[0], p])
-                boundary.append([x[-1], p])
+                if not as_tensor:
+                    boundary.append([x[0], p])
+                    boundary.append([x[-1], p])
+                else:
+                    boundary.append(tf.constant([[x[0], p]], dtype=dtype))
+                    boundary.append(tf.constant([[x[-1], p]], dtype=dtype))
             self._boundary = boundary
         self._size = len(self._data)
 
@@ -90,7 +112,7 @@ class DataSet:
      underlying coordinates, and the coordinate data for a given coordinate axis.
     """
 
-    def __init__(self, *, x: Sequence[Union[Sequence[Union[int, float]], float]], f: Sequence[float],
+    def __init__(self, *, x: Sequence, f: Sequence[float],
                  as_tensor: bool = False, data_type: tf.DType = tf.dtypes.float64):
         """Initializes a DataSet object from a list of coordinates and corresponding data values.
 
@@ -190,7 +212,8 @@ class DataSet:
 class DataGrid:
     """DataGrid type. A DataGrid consists of a grid and matching function values."""
 
-    def __init__(self, *, x: Grid, f: Sequence[float]):
+    def __init__(self, *, x: Grid, f: Sequence[float],
+                 as_tensor: bool = False, dtype: tf.DType = tf.dtypes.float64):
         """Initializes a DataGrid object from a grid and corresponding data values.
 
         Args:
@@ -210,7 +233,7 @@ class DataGrid:
         self._y = x.y
         self._dim = x.dim
         self._size = len(f)
-        self._data = f
+        self._data = f if not as_tensor else [tf.constant([val], dtype=dtype) for val in f]
 
     # .. Magic methods ........................................................
 

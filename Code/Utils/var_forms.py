@@ -119,7 +119,6 @@ def integrate_Burger(u, du, laplace, n_test_func, quads, quads_scaled, jacobians
 
         return tf.add(tf.add(tf.subtract(tf.scalar_mul(nu, integral_1), boundary_term), integral_2), integral_3)
 
-
 def var_sum(*, u, du, ddu, n_test_func,
             quads: DataGrid, quads_scaled: Sequence[DataGrid], jacobians: Sequence[float], grid_boundary: Sequence,
             var_form: int, eq_type: str, pde_params: dict = None,
@@ -150,8 +149,29 @@ def var_sum(*, u, du, ddu, n_test_func,
 
     if eq_type == 'Poisson':
 
-        return integrate_Poisson(u, du, laplace, n_test_func, quads, quads_scaled, jacobians, grid_boundary, var_form,
-                                 dtype=dtype)
+        test_func_vals = tf.convert_to_tensor(test_function(quads.grid.data, n_test_func) * quads.data, dtype=dtype)
+        res = 0
+        for i in range(len(quads_scaled)):
+            s = tf.convert_to_tensor(quads_scaled[i].grid.data)
+            with tf.GradientTape(persistent=True) as tape1:
+                x_unstacked = tf.unstack(s, axis=1)
+                tape1.watch(x_unstacked)
+                with tf.GradientTape() as tape2:
+                    x_stacked = tf.stack(x_unstacked, axis=1)
+                    tape2.watch(x_stacked)
+                    y = u(x_stacked)
+                grad = tape2.gradient(y, x_stacked)
+                grad_unstacked = tf.unstack(grad, axis=1)
+            d2f_dx2 = []
+            for df_dxi, xi in zip(grad_unstacked, x_unstacked):
+                d2f_dx2.append(tape1.gradient(df_dxi, xi))
+            d2f_dx2_stacked = tf.stack(d2f_dx2, axis=1)
+
+            res += tf.reduce_sum(d2f_dx2_stacked * test_func_vals) * jacobians[i]
+
+        return tf.constant([0], dtype=dtype)
+        # return integrate_Poisson(u, du, laplace, n_test_func, quads, quads_scaled, jacobians, grid_boundary, var_form,
+        #                          dtype=dtype)
 
     elif eq_type == 'Helmholtz':
 

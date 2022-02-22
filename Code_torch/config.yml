@@ -9,7 +9,7 @@ space:
   # The domain boundary, given as [[x_0, x_1], [y_0, y_1]]
   boundary: [-1, 1]
   # The grid size. For 2d, this should be an array. For 1d, this should be a scalar.
-  grid_size: 5
+  grid_size: 80
 PDE:
   type: Poisson
   Helmholtz:
@@ -24,13 +24,10 @@ variational_form: 1
 # The number of test functions to use. Test functions are Jacobi polynomials.
 N_test_functions: 80
 
-# number of quadrature points
-N_quad: 60
-
 # Neural net architecture ......................................................
 architecture:
-  layers: 2
-  nodes_per_layer: 20
+  layers: 4
+  nodes_per_layer: 60
 
 # Training settings ............................................................
 N_iterations: 1000
@@ -39,7 +36,7 @@ loss_weight: 1
 
 # Plot settings ................................................................
 plots:
-  plot_points: 100
+  plot_grid: 100
   color: blue
   # these are passed to matplotlib.rcParams
   rcParams:

@@ -17,9 +17,11 @@ into a virtal environment to avoid interfering with system-wide package installa
 
 | Package        | Version | Comments                   |
 |----------------|---------|----------------------------|
-| Python         | \>= 3.7 |                            |
+| Python         | \>= 3.9 |                            |
 | Tensorflow     | \>= 2.0 | Machine learning package.  |
 | PyYAML         | \>= 6.0 | Handles configuration      |
+| pyDOE          | 
+| matplotlib
 
 > **_Note:_**  On Apple Silicon, install tensorflow via `pip install tensorflow-macos`. 
 > If you wish to train on your GPU, try following [these](https://developer.apple.com/metal/tensorflow-plugin/) 

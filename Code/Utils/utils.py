@@ -6,6 +6,7 @@ from pyDOE import lhs
 from .data_types import DataGrid, Grid
 from .test_functions import GaussLobattoJacobiWeights
 
+
 def validate_cfg(cfg: dict):
     """Checks the configuration settings are valid to prevent cryptic errors"""
 
@@ -36,7 +37,8 @@ def validate_cfg(cfg: dict):
             raise ValueError("Grid size should be at least 2! Increase grid size.")
 
 
-def grid_1d(boundary: Sequence[float], grid_size: int, *, dtype: tf.DType = tf.dtypes.float64) -> Grid:
+def grid_1d(boundary: Sequence[float], grid_size: int, *,
+            as_tensor: bool = False, dtype: tf.DType = tf.dtypes.float64) -> Grid:
     """Constructs a one-dimensional grid.
     Args:
         boundary :Sequence: the boundaries of the grid
@@ -49,13 +51,13 @@ def grid_1d(boundary: Sequence[float], grid_size: int, *, dtype: tf.DType = tf.d
     upper = boundary[1]
     step_size = (1.0 * upper - lower) / (1.0 * grid_size - 1)
     x = [tf.cast(lower + _ * step_size, dtype).numpy() for _ in range(grid_size)]
-    return Grid(x=x)
+    return Grid(x=x, as_tensor=as_tensor, dtype=dtype)
 
 
 def construct_grid(dim: int,
                    boundary: Sequence,
                    grid_size: Union[int, Sequence[int]],
-                   *, dtype: tf.DType = tf.dtypes.float64) -> Grid:
+                   *, as_tensor: bool = False, dtype: tf.DType = tf.dtypes.float64) -> Grid:
     """Constructs a grid of the given dimension.
     Args:
         dim :int: the dimension of the grid
@@ -66,18 +68,18 @@ def construct_grid(dim: int,
         a Grid of the given values
     """
     if dim == 1:
-        g: Grid = grid_1d(boundary, grid_size, dtype=dtype)
+        g: Grid = grid_1d(boundary, grid_size, as_tensor=as_tensor, dtype=dtype)
 
         return Grid(x=g.x)
 
     elif dim == 2:
-        x: Grid = grid_1d(boundary[0], grid_size[0], dtype=dtype)
-        y: Grid = grid_1d(boundary[1], grid_size[1], dtype=dtype)
+        x: Grid = grid_1d(boundary[0], grid_size[0], as_tensor=as_tensor, dtype=dtype)
+        y: Grid = grid_1d(boundary[1], grid_size[1], as_tensor=as_tensor, dtype=dtype)
 
         return Grid(x=x.x, y=y.x)
 
 
-def rescale(grid: list[float], *, old_int: list[float], new_int: list[float]) -> list[float]:
+def rescale(grid: Sequence[float], *, old_int: Sequence[float], new_int: Sequence[float]) -> Sequence[float]:
     """Rescale a list of points to an interval"""
     return [new_int[0] + (new_int[1] - new_int[0]) * (g - old_int[0]) for g in grid]
 
@@ -88,8 +90,10 @@ def get_random_points(grid: Grid, *, n_points) -> Sequence[Union[Sequence, float
         return rescale([p[0] for p in lhs(1, n_points)], old_int=[0, 1], new_int=grid.boundary)
 
     elif grid.dim == 2:
-        pts_x: list = rescale([p[0] for p in lhs(1, n_points)], old_int=[0, 1], new_int=[grid.x[0], grid.x[-1]])
-        pts_y: list = rescale([p[0] for p in lhs(1, n_points)], old_int=[0, 1], new_int=[grid.y[0], grid.y[-1]])
+        pts_x: Sequence[float] \
+            = rescale([p[0] for p in lhs(1, n_points)], old_int=[0, 1], new_int=[grid.x[0], grid.x[-1]])
+        pts_y: Sequence[float] \
+            = rescale([p[0] for p in lhs(1, n_points)], old_int=[0, 1], new_int=[grid.y[0], grid.y[-1]])
 
         return [[pts_x[i], pts_y[i]] for i in range(len(pts_x))]
 
@@ -194,11 +198,11 @@ def integrate_over_grid(func, test_func, quads: DataGrid, quads_scaled: Sequence
         res = tf.constant([0], dtype=dtype)
         for j in range(len(quads_scaled)):
             val = tf.stack(
-                     [tf.multiply(
-                         tf.tensordot(func(tf.constant([quads_scaled[j].grid.data[i]], dtype=dtype)),
-                                      tf.constant(test_func(quads.grid.data[i]), dtype=dtype), 0),
-                         (jacobians[j] * quads.data[i]))
-                      for i in range(quads.grid.size)
-                      ])
+                [tf.multiply(
+                    tf.multiply(
+                        func(tf.cast([quads_scaled[j].grid.data[i]], dtype=dtype)),
+                        tf.cast(test_func(quads.grid.data[i]), dtype=dtype)
+                    ),
+                    (jacobians[j] * quads.data[i])) for i in range(quads.grid.size)])
             res = tf.add(res, tf.reduce_sum(val))
         return res

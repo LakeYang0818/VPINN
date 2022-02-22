@@ -1,14 +1,11 @@
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from matplotlib import rcParams
 from .test_functions import dtest_function
-import numpy as np
-import yaml
 
 from .functions import u as u_exact
 from .data_types import DataGrid, Grid
 
 
+# Plots the prediction value
 def plot_prediction(x: Grid, y_pred, grid: Grid):
     for xc in grid.data:
         plt.axvline(x=xc, linewidth=1, ls='--')
@@ -22,14 +19,14 @@ def plot_prediction(x: Grid, y_pred, grid: Grid):
     plt.show()
 
 
-# Plot the quadrature data
+# Plots the quadrature data
 def plot_quadrature_data(quadrature_data: DataGrid):
     plt.title('Quadrature points')
     plt.scatter(quadrature_data.grid.data, quadrature_data.data)
     plt.show()
 
 
-# Plot the loss over time
+# Plots the loss over time
 def plot_loss(loss_tracker: dict):
     plt.title('Loss over time')
     # plt.plot(loss_tracker['iter'], loss_tracker['total_loss'], label=r'total loss', color='black')
@@ -41,7 +38,8 @@ def plot_loss(loss_tracker: dict):
     plt.show()
 
 
-def plot_test_functions(x: Grid, n_test_func: int, *, d: int=0):
+# Plots the test functions
+def plot_test_functions(x: Grid, n_test_func: int, *, d: int = 0):
     for i in range(1, n_test_func):
         plt.plot(x.data, dtest_function(x.data, i, d=d))
     plt.show()

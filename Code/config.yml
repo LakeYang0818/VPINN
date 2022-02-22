@@ -22,18 +22,18 @@ PDE:
 variational_form: 1
 
 # The number of test functions to use. Test functions are Jacobi polynomials.
-N_test_functions: 30
+N_test_functions: 80
 
 # number of quadrature points
-N_quad: 20
+N_quad: 60
 
 # Neural net architecture ......................................................
 architecture:
-  layers: 4
+  layers: 2
   nodes_per_layer: 20
 
 # Training settings ............................................................
-N_iterations: 20
+N_iterations: 1000
 learning_rate: 0.001
 loss_weight: 1
 

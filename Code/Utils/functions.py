@@ -1,9 +1,7 @@
 from scipy.special import gamma
 from scipy.special import jacobi
 import numpy as np
-import tensorflow as tf
 from typing import Any, Union, Sequence
-from functools import wraps
 
 # Local imports
 from Utils.data_types import Grid
@@ -52,7 +50,6 @@ def u(x: Any) -> float:
         return amp * utemp
 
 
-
 # External forcing
 @adapt_input
 def f(x: Any) -> float:
@@ -72,6 +69,7 @@ def f(x: Any) -> float:
         amp = 1
         gtemp = -0.1 * (omega ** 2) * np.sin(omega * x) - (2 * r1 ** 2) * (np.tanh(r1 * x)) / ((np.cosh(r1 * x)) ** 2)
         return -amp*gtemp
+
 
 # ... Test functions .......................................................
 # Recursive generation of the Jacobi polynomial of order n

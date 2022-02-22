@@ -1,6 +1,7 @@
 from scipy.special import gamma
 from scipy.special import jacobi
 import numpy as np
+import torch
 from typing import Any, Union, Sequence
 
 # Local imports
@@ -14,14 +15,23 @@ from Utils.data_types import Grid
 
 
 def adapt_input(func=None):
-    def evaluate(x: Union[float, Sequence[Sequence[float]], Grid], *args, **kwargs) -> Union[float, Sequence[float]]:
+    def evaluate(x: Any, *args, **kwargs) -> Any:
         if isinstance(x, Sequence):
             if isinstance(x[0], Sequence):
                 return [func(p, *args, **kwargs) for p in x]
             else:
                 return func(x, *args, **kwargs)
+
+        elif isinstance(x, torch.Tensor):
+            res = [func(p.detach(), *args, **kwargs) for p in x]
+            return torch.stack(res)
+
         elif isinstance(x, Grid):
-            return [func(p, *args, **kwargs) for p in x.data]
+            if isinstance(x.data[0], torch.Tensor):
+                return torch.stack([func(p, *args, **kwargs) for p in x.data])
+            else:
+                return [func(p, *args, **kwargs) for p in x.data]
+
         else:
             return func(x, *args, **kwargs)
 

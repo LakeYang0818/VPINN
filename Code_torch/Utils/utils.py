@@ -1,4 +1,5 @@
 import tensorflow as tf
+import torch
 from typing import Sequence, Union
 import numpy as np
 from pyDOE import lhs
@@ -18,19 +19,19 @@ def validate_cfg(cfg: dict):
             raise TypeError('The Burgers equation requires a two-dimensional grid!')
         if isinstance(cfg['space']['grid_size'], Sequence):
             raise TypeError('The grid size should be a scalar! Adjust the config.')
-        if isinstance(cfg['N_quad'], Sequence):
-            raise TypeError('The number of quadrature points should be a scalar! Adjust the config.')
-        if cfg['N_quad'] < 3:
-            raise ValueError('Need at least three quadrature points! Increase N_quad.')
+        # if isinstance(cfg['N_quad'], Sequence):
+        #     raise TypeError('The number of quadrature points should be a scalar! Adjust the config.')
+        # if cfg['N_quad'] < 3:
+        #     raise ValueError('Need at least three quadrature points! Increase N_quad.')
         if cfg['space']['grid_size'] == 1:
             raise ValueError("Grid size should be at least 2! Increase grid size.")
     else:
         if not isinstance(cfg['space']['grid_size'], Sequence):
             raise TypeError('The grid size must be a sequence of the form [n_y, n_x]! '
                             'Adjust the config.')
-        if not isinstance(cfg['N_quad'], Sequence):
-            raise TypeError('The number of quadrature points must be a sequence of the form [n_y, n_x]! '
-                            'Adjust the config.')
+        # if not isinstance(cfg['N_quad'], Sequence):
+        #     raise TypeError('The number of quadrature points must be a sequence of the form [n_y, n_x]! '
+        #                     'Adjust the config.')
         if 3 in cfg['N_quad']:
             raise ValueError('Need at least three quadrature points! Increase N_quad.')
         if 1 in cfg['space']['grid_size']:
@@ -38,11 +39,14 @@ def validate_cfg(cfg: dict):
 
 
 def grid_1d(boundary: Sequence[float], grid_size: int, *,
-            as_tensor: bool = False, dtype: tf.DType = tf.dtypes.float64) -> Grid:
+            as_tensor: bool = False,
+            dtype=torch.float,
+            requires_grad: bool = False) -> Grid:
     """Constructs a one-dimensional grid.
     Args:
         boundary :Sequence: the boundaries of the grid
         grid_size :int: the number of grid points
+        as_tensor: whether to use tensors for the grid points
         dtype: the datatype of the grid points
     Returns:
         a grid of the given values
@@ -50,14 +54,17 @@ def grid_1d(boundary: Sequence[float], grid_size: int, *,
     lower = boundary[0]
     upper = boundary[1]
     step_size = (1.0 * upper - lower) / (1.0 * grid_size - 1)
-    x = [tf.cast(lower + _ * step_size, dtype).numpy() for _ in range(grid_size)]
-    return Grid(x=x)
+    x = [lower + _ * step_size for _ in range(grid_size)]
+    return Grid(x=x, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
 
 
 def construct_grid(dim: int,
                    boundary: Sequence,
                    grid_size: Union[int, Sequence[int]],
-                   *, as_tensor: bool = False, dtype: tf.DType = tf.dtypes.float64) -> Grid:
+                   *,
+                   as_tensor: bool = True,
+                   dtype=torch.float,
+                   requires_grad: bool = False) -> Grid:
     """Constructs a grid of the given dimension.
     Args:
         dim :int: the dimension of the grid
@@ -68,15 +75,15 @@ def construct_grid(dim: int,
         a Grid of the given values
     """
     if dim == 1:
-        g: Grid = grid_1d(boundary, grid_size, as_tensor=as_tensor, dtype=dtype)
+        g: Grid = grid_1d(boundary, grid_size, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
 
-        return Grid(x=g.x)
+        return Grid(x=g.x, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
 
     elif dim == 2:
-        x: Grid = grid_1d(boundary[0], grid_size[0], as_tensor=as_tensor, dtype=dtype)
-        y: Grid = grid_1d(boundary[1], grid_size[1], as_tensor=as_tensor, dtype=dtype)
+        x: Grid = grid_1d(boundary[0], grid_size[0], as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
+        y: Grid = grid_1d(boundary[1], grid_size[1], as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
 
-        return Grid(x=x.x, y=y.x)
+        return Grid(x=x.x, y=y.x, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
 
 
 def rescale(grid: Sequence[float], *, old_int: Sequence[float], new_int: Sequence[float]) -> Sequence[float]:
@@ -206,3 +213,11 @@ def integrate_over_grid(func, test_func, quads: DataGrid, quads_scaled: Sequence
                     (jacobians[j] * quads.data[i])) for i in range(quads.grid.size)])
             res = tf.add(res, tf.reduce_sum(val))
         return res
+
+
+def integrate(func, test_func, coords, as_tensor: bool = False, dtype = torch.float, requires_grad: bool = False):
+    res = 1 / len(coords) * torch.sum(func(coords) * test_func(coords))
+    if not as_tensor:
+        return res
+    else:
+        return torch.tensor(1 / len(coords) * torch.sum(func(coords) * test_func(coords)), dtype=dtype, requires_grad=requires_grad)
