@@ -68,14 +68,13 @@ if __name__ == "__main__":
                                         quadrature_data_scaled, jacobians)
                                         for i in range(1, n_test_func + 1)])
 
-    # Build the model and initialize the optimiser
+    # Instantiate the model class
     print("Instantiating the model ... ")
     model: VPINN = VPINN(f_integrated,
                          quadrature_data,
                          quadrature_data_scaled,
                          jacobians,
                          grid.boundary,
-                         n_test_func,
                          input_dim=dim,
                          architecture=architecture,
                          loss_weight=cfg['loss_weight'],
@@ -108,4 +107,7 @@ if __name__ == "__main__":
 
     # Loss over time
     plots.plot_loss(model.loss_tracker)
+
+    plots.plot_test_functions(plot_grid, n_test_func)
+
     print("Done.")

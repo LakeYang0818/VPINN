@@ -82,7 +82,9 @@ def jacobi_poly(x: Any, n: int, *, a: int, b: int) -> Union[float, Sequence[floa
 
 def djacobi_poly(x: Any, n: int, *, d: int, a: int, b: int) -> Union[float, Sequence[float]]:
     """Returns the dth-derivative of the Jacobi polynomial of order n"""
-    if d >= n:
+    if d == 0:
+        return jacobi_poly(x, n, a=a, b=b)
+    elif d >= n:
         return 0
     else:
         return gamma(a+b+n+1+d)/(2**d*gamma(a+b+n+1))*jacobi_poly(x, n-d, a=a+d, b=b+d)
@@ -91,10 +93,10 @@ def djacobi_poly(x: Any, n: int, *, d: int, a: int, b: int) -> Union[float, Sequ
 @adapt_input
 def test_function_1d(x: Any, n) -> Union[float, Sequence[float]]:
     """Returns the test function used for a 1d grid"""
-    return jacobi_poly(x, n, a=0, b=0) - jacobi_poly(x, n-1, a=0, b=0)
+    return jacobi_poly(x, n+1, a=0, b=0) - jacobi_poly(x, n-1, a=0, b=0)
 
 
 @adapt_input
 def dtest_function_1d(x: Any, n: int, *, d: int) -> Union[float, Sequence[float]]:
     """Returns the derivative of the test function on a 1d grid"""
-    return djacobi_poly(x, n, d=d, a=0, b=0) - djacobi_poly(x, n-1, d=d, a=0, b=0)
+    return djacobi_poly(x, n+1, d=d, a=0, b=0) - djacobi_poly(x, n-1, d=d, a=0, b=0)

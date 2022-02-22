@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib import rcParams
+from .test_functions import dtest_function
 import numpy as np
 import yaml
 
@@ -37,4 +38,10 @@ def plot_loss(loss_tracker: dict):
     plt.legend(shadow=True, loc='upper left', fontsize=18, ncol=1)
     plt.xlabel(r'iteration')
     plt.ylabel(r'loss', rotation=0)
+    plt.show()
+
+
+def plot_test_functions(x: Grid, n_test_func: int, *, d: int=0):
+    for i in range(1, n_test_func):
+        plt.plot(x.data, dtest_function(x.data, i, d=d))
     plt.show()
