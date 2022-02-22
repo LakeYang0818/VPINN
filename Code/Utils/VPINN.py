@@ -221,13 +221,16 @@ class VPINN(keras.Model):
 
         for it in range(n_iterations):
             with tf.GradientTape() as tape:
-                loss = self.calculate_boundary_loss(training_data)
+                loss_b = self.calculate_boundary_loss(training_data)
+                loss_v = 0
                 for i in range(1, self._n_test_functions):
-                    loss += self._loss_weight*self.calculate_variational_loss(n_test_func=i)
+                    loss_v += self.calculate_variational_loss(n_test_func=i)
+                loss = loss_b + self._loss_weight*loss_v
             grads = tape.gradient(loss, self.trainable_variables)
 
             self._optimizer.apply_gradients(zip(grads, self.trainable_variables))
             if it % 10==0:
+                self.update_loss_tracker(it, loss, loss_b, loss_v)
                 print(f"Current iteration: {it}; loss: {loss}")
             # Update the variational loss every 10 iterations
             # if it % 10 == 0:

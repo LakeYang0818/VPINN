@@ -108,6 +108,6 @@ if __name__ == "__main__":
     # Loss over time
     plots.plot_loss(model.loss_tracker)
 
-    plots.plot_test_functions(plot_grid, n_test_func)
+    # plots.plot_test_functions(plot_grid, n_test_func)
 
     print("Done.")

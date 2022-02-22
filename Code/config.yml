@@ -33,7 +33,7 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ............................................................
-N_iterations: 1000
+N_iterations: 20
 learning_rate: 0.001
 loss_weight: 1
 
