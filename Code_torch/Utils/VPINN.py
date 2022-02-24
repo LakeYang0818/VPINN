@@ -20,18 +20,36 @@ class VPINN(nn.Module):
         "Burger"
     }
 
-    def __init__(self, *, architecture):
+    def __init__(self, architecture, activation_func):
+        """Initialises the neural net.
+
+        Args:
+            architecture: the number of layers and nodes per layer
+            activation_func: the activation function to use
+        """
         super(VPINN, self).__init__()
         self.flatten = nn.Flatten()
         self.input_dim = architecture[0]
         self.output_dim = architecture[-1]
         self.hidden_dim = len(architecture)-2
-        current_dim = architecture[0]
+        self.activation_func = activation_func
+
+        # Add layers
         self.layers = nn.ModuleList()
-        self.layers.extend([nn.Linear(architecture[i], architecture[i+1]) for i in range(len(architecture)-1)])
-        self.layers.append(nn.Linear(architecture[-2], 1))
+        for i in range(len(architecture)-1):
+            self.layers.append(nn.Linear(architecture[i], architecture[i+1]))
 
     def forward(self, x):
-        x = self.flatten(x)
-        out = self.stack(x)
-        return out
+        for i in range(len(self.layers)-1):
+            x = self.activation_func(self.layers[i](x))
+        x = self.layers[-1](x)
+        return x
+
+    def grad(self, x):
+        x = torch.autograd.grad(self.forward(x), x)
+        return x
+
+    def gradgrad(self, x):
+        first_derivative = torch.autograd.grad(self.forward(x), x)
+        return torch.autograd.grad(first_derivative, x)
+

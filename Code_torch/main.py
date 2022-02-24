@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import torch
+from torch import nn
 from typing import Union, Sequence, List, Any
 import yaml
 from matplotlib import rcParams
@@ -12,6 +13,8 @@ from Utils.data_types import DataGrid, DataSet, Grid
 from Utils.functions import f, u
 from Utils.test_functions import test_function
 from Utils.VPINN import VPINN
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Load config file
 with open('config.yml', 'r') as file:
@@ -33,7 +36,7 @@ if __name__ == "__main__":
     # Get the neural net architecture from the config
     n_nodes: int = cfg['architecture']['nodes_per_layer']
     n_layers: int = cfg['architecture']['layers']
-    architecture: Union[List[int], Any] = [dim] + [n_nodes] * n_layers + [1]
+    architecture: Union[List[int], Any] = [dim] + [n_nodes] * (n_layers+1) + [1]
 
     # Get PDE constants from the config
     PDE_constants: dict = {'Helmholtz': cfg['PDE']['Helmholtz']['k'],
@@ -73,10 +76,22 @@ if __name__ == "__main__":
     # Prepare the training data. The training data consists of the explicit solution of the function on the boundary
     # training_data: DataSet = DataSet(x=grid.boundary,
     #                                  f=u(grid.boundary) if dim > 1 else [u(grid.boundary[0]), u(grid.boundary[-1])])
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model: VPINN = VPINN(architecture=architecture).to(device)
+    model: VPINN = VPINN(architecture, torch.sin).to(device)
     print(model)
-    print(model.forward(torch.tensor(0.4)))
+    x = torch.tensor([0.2], requires_grad=True)
+    y = torch.tensor([0.3], requires_grad=True)
+    r = torch.stack((x, y))
+    print(model(r))
+    print(model.grad(x))
+    # print(model.grad(r))
+    # print(model.gradgrad(x))
+
+    # print(model(x))
+    # print(model.grad(y))
+    # print(model.grad(x))
+    # print(torch.flatten(model.gradgrad(x), start_dim=1))
+    # print(torch.flatten(model.gradgrad(y)))
+
 
     # # Instantiate the model class
     # print("Instantiating the model ... ")
