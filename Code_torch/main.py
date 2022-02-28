@@ -1,16 +1,14 @@
 from matplotlib import rcParams
-import numpy as np
 import torch
-from typing import Union, Sequence, List, Any
+from typing import Any, List, Sequence, Union
 import yaml
 
 # Local imports
-import Utils.utils as utils
+from Utils.Types.Grid import construct_grid, Grid
+from Utils.Types.DataSet import DataSet
+from Utils.functions import f, integrate, u, test_function
 import Utils.plots as plots
-from Utils.data_types import DataSet
-from Types.Grid import construct_grid, Grid
-from Utils.functions import f, u
-from Utils.test_functions import test_function
+from Utils.utils import validate_cfg
 from Utils.VPINN import VPINN
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -19,16 +17,17 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 with open('config.yml', 'r') as file:
     cfg = yaml.safe_load(file)
 
-# ..............................................................................
+# ......................................................................................................................
 
 if __name__ == "__main__":
 
     # Validate the configuration to prevent cryptic errors
-    utils.validate_cfg(cfg)
+    validate_cfg(cfg)
 
     # Get space parameters from the config
     dim: int = cfg['space']['dimension']
     eq_type: str = cfg['PDE']['type']
+    var_form: int = cfg['variational_form']
     grid_size: Union[int, Sequence[int]] = cfg['space']['grid_size']
 
     # Get the neural net architecture from the config
@@ -45,44 +44,68 @@ if __name__ == "__main__":
 
     # Construct the grid
     print("Constructing grid ...")
-    grid: Grid = construct_grid(dim, cfg['space']['boundary'], grid_size, as_tensor=True)
+    grid: Grid = construct_grid(dim, cfg['space']['boundary'], grid_size, as_tensor=True, requires_grad=False)
+
+    # Evaluate the test functions on grid points. This only needs to be done once.
+    print("Evaluating test functions on the grid interior ... ")
+    test_func_vals: DataSet = DataSet(coords=[[i] for i in range(n_test_func)],
+                                      data=[test_function(grid.interior, i) for i in range(1, n_test_func + 1)],
+                                      as_tensor=True, requires_grad=False)
 
     # Integrate the external function over the grid against all the test functions.
     # This will be used to calculate the variational loss and only needs to be done once.
     print("Integrating test functions ...")
-    f_integrated: DataSet = DataSet(x=[i for i in range(0, n_test_func)],
-                                    data=[utils.integrate(f, lambda x: test_function(x, i), grid.interior,
-                                                          as_tensor=True)
-                                          for i in range(1, n_test_func + 1)], as_tensor=True)
-
-    # Evaluate the test functions against points on the grid
-    print("Evaluating test functions on the grid interior ... ")
-    test_func_vals: DataSet = DataSet(x=[i for i in range(n_test_func)],
-                                       data=[test_function(grid.interior, i) for i in range(1, n_test_func + 1)],
-                                       as_tensor=True, requires_grad=False)
-
-    # Prepare the training data. The training data consists of the explicit solution of the function on the boundary
-    training_data: DataSet = DataSet(x=grid.boundary,
-                                     data=u(grid.boundary) if dim > 1
-                                     else torch.stack([u(grid.boundary[0]), u(grid.boundary[-1])]))
-
-    # Now turn on the tracking for the grid
-    grid.data.requires_grad=True
-    grid.interior.requires_grad=True
-    grid.boundary.requires_grad=True
+    f_integrated: DataSet = DataSet(coords=[[i] for i in range(n_test_func)],
+                                    data=[integrate(f(grid.interior), test_func_vals.data[i])
+                                          for i in range(n_test_func)],
+                                    as_tensor=True, requires_grad=False)
 
     # Instantiate the model class
-    model: VPINN = VPINN(architecture, torch.sin, cfg['loss_weight']).to(device)
+    model: VPINN = VPINN(architecture, eq_type, var_form,
+                         pde_constants=PDE_constants,
+                         learning_rate=cfg['learning_rate'],
+                         activation_func=torch.sin).to(device)
+
+    # Turn on tracking for the grid
+    # Note: this actually only needs to happen for the domain of integration (in our case the interior)
+    grid.data.requires_grad = True
+    grid.interior.requires_grad = True
+    grid.boundary.requires_grad = True
+
+    # Prepare the training data. The training data consists of the explicit solution of the function on the boundary
+    print("Generating training data ...")
+    training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True, requires_grad=False)
 
     # Train the model
-    model.train_custom(training_data, f_integrated, test_func_vals, grid, cfg['N_test_functions'], cfg['N_iterations'])
+    print("Commencing training ...")
+    loss_w: float = cfg['loss_weight']
+    for it in range(cfg['N_iterations']):
 
-    print("Done")
+        model.optimizer.zero_grad()
+
+        # Calculate the loss
+        loss_b = model.boundary_loss(training_data)
+        loss_v = model.variational_loss(grid, f_integrated, test_func_vals)
+        loss = loss_b + loss_w * loss_v
+        loss.backward(retain_graph=True)
+
+        # Adjust the model parameters
+        model.optimizer.step()
+
+        # Track loss values
+        loss_glob, loss_b_glob, loss_v_glob = loss.item(), loss_b.item(), loss_v.item()
+
+        if it % 10 == 0:
+            model.update_loss_tracker(it, loss_glob, loss_b_glob, loss_v_glob)
+        if it % 100 == 0:
+            print(f"Iteration {it}: total loss: {loss_glob}, loss_b: {loss_b_glob}, loss_v: {loss_v_glob}")
 
     # Plot the results
     print("Plotting ... ")
     rcParams.update(cfg['plots']['rcParams'])
-    plot_grid: Grid = utils.construct_grid(dim, cfg['space']['boundary'], cfg['plots']['plot_grid'])
+
+    # Generate the plot grid, which may be finer than the training grid
+    plot_grid: Grid = construct_grid(dim, cfg['space']['boundary'], cfg['plots']['plot_grid'], requires_grad=False)
 
     # Get the model predictions on the plotting grid. Turn off tracking for the prediction data.
     predictions = model.forward(plot_grid.data).detach()
@@ -92,3 +115,5 @@ if __name__ == "__main__":
 
     # Plot loss over time
     plots.plot_loss(model.loss_tracker)
+
+    print("Done.")

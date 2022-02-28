@@ -5,11 +5,11 @@ seed: 42
 
 # The space, equation, and external forcing
 space:
-  dimension: 1
+  dimension: 2
   # The domain boundary, given as [[x_0, x_1], [y_0, y_1]]
-  boundary: [-1, 1]
+  boundary: [[-1, 1], [-1, 1]]
   # The grid size. For 2d, this should be an array. For 1d, this should be a scalar.
-  grid_size: 80
+  grid_size: [15, 15]
 PDE:
   type: Poisson
   Helmholtz:
@@ -30,13 +30,13 @@ architecture:
   nodes_per_layer: 60
 
 # Training settings ............................................................
-N_iterations: 1000
+N_iterations: 3000
 learning_rate: 0.001
 loss_weight: 1
 
 # Plot settings ................................................................
 plots:
-  plot_grid: 100
+  plot_grid: [500, 500]
   color: blue
   # these are passed to matplotlib.rcParams
   rcParams:

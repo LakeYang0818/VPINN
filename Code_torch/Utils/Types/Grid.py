@@ -5,6 +5,7 @@ import warnings
 
 
 class Grid:
+
     """
     Grid type. A grid consists of pairs of x- and y values, which may have
     different dimensions. The Grid class contains information on its boundary,
@@ -208,6 +209,7 @@ def construct_grid(dim: int,
                    as_tensor: bool = True,
                    dtype=torch.float,
                    requires_grad: bool = False) -> Grid:
+
     """Constructs a grid of the given dimension.
 
     :param dim: the dimension of the grid

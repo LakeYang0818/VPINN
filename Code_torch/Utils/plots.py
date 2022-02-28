@@ -1,46 +1,63 @@
 import matplotlib.pyplot as plt
-from .test_functions import dtest_function
-import torch
 import numpy as np
-from .functions import u as u_exact
-from .data_types import DataGrid, Grid
+import torch
 
+from .functions import dtest_function, u as u_exact
+from .Types.Grid import Grid
+
+"""Plots used in the VPINNS model"""
 
 # Plots the prediction value
 def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
+
+    # 1D plot
     if grid.dim == 1:
+
+        # Draw the grid points
         for xc in grid.data.numpy():
             plt.axvline(x=xc, linewidth=1, ls='--')
-        plt.plot(torch.flatten(grid.data).numpy(), torch.flatten(u_exact(grid.data)).numpy(), color='red', label='exact')
-        plt.scatter(np.asarray(torch.flatten(grid.data)), torch.flatten(y_pred), color='black', label='VPINN')
+
+        # Plot the exact solution and the model predictions
+        plt.plot(torch.flatten(grid.data).numpy(), u_exact(torch.flatten(grid.data)).numpy(),
+                 color='red', label='exact')
+        plt.scatter(np.asarray(torch.flatten(grid.data)), torch.flatten(y_pred),
+                    color='black', label='VPINN')
+
+        # Set plot labels and titles
         plt.xlabel(r'$x$')
         plt.ylabel(r'$u$', rotation=0)
         plt.title('Exact and VPINN solution')
-        plt.axhline(0, linewidth=0.8, linestyle='-', color='black')
+
+        # Show the legend
         plt.legend(shadow=True, loc='upper left', fontsize=18, ncol=1)
-    elif grid.dim ==2:
+
+        # Draw x-axis
+        plt.axhline(0, linewidth=0.8, linestyle='-', color='black')
+
+    # 2d heatmap
+    elif grid.dim == 2:
         plt.imshow(torch.reshape(torch.flatten(y_pred), grid_shape))
+
+        plt.xlabel(r'$x$')
+        plt.ylabel(r'$y$', rotation=0)
+
     plt.show()
-
-
-# Plots the quadrature data
-def plot_quadrature_data(quadrature_data: DataGrid):
-    plt.title('Quadrature points')
-    plt.scatter(quadrature_data.grid.data, quadrature_data.data)
-    plt.show()
-
 
 # Plots the loss over time
 def plot_loss(loss_tracker: dict):
-    plt.title('Loss over time')
 
+    # Plot the boundary loss
     plt.plot(loss_tracker['iter'], loss_tracker['loss_b'], label=r'boundary loss', color='red')
+
+    # Plot the variational loss
     plt.plot(loss_tracker['iter'], loss_tracker['loss_v'], label=r'variational loss', color='blue')
 
-    plt.legend(shadow=True, loc='upper left', fontsize=18, ncol=1)
+    # Set labels and titles
+    plt.title('Loss over time')
     plt.xlabel(r'iteration')
     plt.ylabel(r'loss', rotation=0)
     plt.yscale('log')
+    plt.legend(shadow=True, loc='upper right', fontsize=18, ncol=1)
     plt.show()
 
 

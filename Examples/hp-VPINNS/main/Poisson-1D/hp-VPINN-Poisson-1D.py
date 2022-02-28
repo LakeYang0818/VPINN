@@ -28,6 +28,9 @@ tf.disable_v2_behavior()
 np.random.seed(1234)
 tf.set_random_seed(1234)
 
+print("Num CPUs Available: ", len(tf.config.list_physical_devices('CPU')))
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
 ###############################################################################
 class VPINN:
     def __init__(self, X_u_train, u_train, X_quad, W_quad, F_exact_total,\
@@ -111,7 +114,7 @@ class VPINN:
         self.sess = tf.Session(config=tf.ConfigProto(device_count={'GPU': 0}))
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
-
+        tf.config.set_visible_devices([], 'GPU')
 ###############################################################################
     def initialize_NN(self, layers):
         weights = []
@@ -129,6 +132,7 @@ class VPINN:
         in_dim = size[0]
         out_dim = size[1]
         xavier_stddev = np.sqrt(2/(in_dim + out_dim), dtype=np.float64)
+        # return tf.Variable(tf.random.uniform(shape=[in_dim, out_dim], minval=-0.05, maxval=0.05, dtype=tf.float64))
         return tf.Variable(tf.truncated_normal([in_dim, out_dim], stddev=xavier_stddev,dtype=tf.float64), dtype=tf.float64)
 
     def neural_net(self, X, weights, biases, a):
@@ -235,7 +239,7 @@ if __name__ == "__main__":
     k = 10
     #++++++++++++++++++++++++++++
     LR = 0.001
-    Opt_Niter = 1000 + 1
+    Opt_Niter = 50000 + 1
     Opt_tresh = 2e-32
     var_form  = 1
     N_Element = 1
