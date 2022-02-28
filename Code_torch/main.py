@@ -7,7 +7,8 @@ import yaml
 # Local imports
 import Utils.utils as utils
 import Utils.plots as plots
-from Utils.data_types import DataSet, Grid
+from Utils.data_types import DataSet
+from Types.Grid import construct_grid, Grid
 from Utils.functions import f, u
 from Utils.test_functions import test_function
 from Utils.VPINN import VPINN
@@ -44,7 +45,7 @@ if __name__ == "__main__":
 
     # Construct the grid
     print("Constructing grid ...")
-    grid: Grid = utils.construct_grid(dim, cfg['space']['boundary'], grid_size, as_tensor=True)
+    grid: Grid = construct_grid(dim, cfg['space']['boundary'], grid_size, as_tensor=True)
 
     # Integrate the external function over the grid against all the test functions.
     # This will be used to calculate the variational loss and only needs to be done once.
