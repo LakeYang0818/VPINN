@@ -89,7 +89,10 @@ class DataSet:
                   self._data = torch.reshape(data,(len(coords), self._dim_data))
             else:
                 # Note: for some odd reason, reshaping here leads to a breaking change. Don't know why
-                self._data = torch.stack([torch.tensor(val, dtype=dtype, requires_grad=requires_grad) for val in data])
+                if isinstance(data[0], torch.Tensor):
+                    self._data = torch.stack([torch.tensor(val.clone().detach().numpy(), dtype=dtype, requires_grad=requires_grad) for val in data])
+                else:
+                    self._data = torch.stack([torch.tensor(val, dtype=dtype, requires_grad=requires_grad) for val in data])
 
         # Set requires_grad attributes for torch.Tensors
         if as_tensor and requires_grad:

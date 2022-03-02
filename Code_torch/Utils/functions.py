@@ -25,8 +25,10 @@ def u(x: Any) -> float:
 
     # Define the 1D case
     if len(x) == 1:
-        r1, omega, amp = 5, 4 * np.pi, 1
-        return amp * (0.1 * np.sin(omega * x) + np.tanh(r1 * x))
+
+        return np.sin(np.pi*x)
+        # r1, omega, amp = 5, 4 * np.pi, 1
+        # return amp * (0.1 * np.sin(omega * x) + np.tanh(r1 * x))
 
     # Define the 2D case
     elif len(x) == 2 :
@@ -51,12 +53,13 @@ def f(x: Any) -> float:
 
     # 1D example
     if len(x) == 1:
-        r1, omega, amp = 5, 4 * np.pi, 1
-        return amp * (0.1 * (omega ** 2) * np.sin(omega * x)
-                      + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
+        return np.pi**2*np.sin(np.pi*x)
+        # r1, omega, amp = 5, 4 * np.pi, 1
+        # return amp * (0.1 * (omega ** 2) * np.sin(omega * x)
+        #               + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
     # 2D example
     elif len(x) == 2:
-        return -2*np.pi**2*np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
+        return 2*np.pi**2*np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
 
     else:
         raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")

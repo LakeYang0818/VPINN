@@ -75,19 +75,19 @@ if __name__ == "__main__":
 
     # Prepare the training data. The training data consists of the explicit solution of the function on the boundary
     print("Generating training data ...")
-    training_data: DataSet = DataSet(coords=grid.data, data=u(grid.data), as_tensor=True, requires_grad=False)
+    training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True, requires_grad=False)
 
     # Train the model
     print("Commencing training ...")
     loss_w: float = cfg['loss_weight']
-    for it in range(cfg['N_iterations']):
+    for it in range(cfg['N_iterations']+1):
 
         model.optimizer.zero_grad()
 
         # Calculate the loss
         loss_b = model.boundary_loss(training_data)
         loss_v = model.variational_loss(grid, f_integrated, test_func_vals)
-        loss = loss_b + loss_w * loss_v
+        loss = loss_w * loss_b + loss_v
         loss.backward(retain_graph=True)
 
         # Adjust the model parameters

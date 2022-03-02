@@ -87,6 +87,8 @@ class VPINN(nn.Module):
         self._loss_tracker['loss_b'].append(loss_b)
         self._loss_tracker['loss_v'].append(loss_v)
 
+    def reset_loss_tracker(self):
+        self._loss_tracker = {'iter': [], 'total_loss': [], 'loss_b': [], 'loss_v': []}
     # ... Evaluation functions .........................................................................................
 
     # The model forward pass

@@ -42,7 +42,7 @@ def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
         fig.suptitle('Exact and predicted solution')
 
         axs[0].set_title('Exact solution')
-        axs[1].set_title('VPINNS')
+        axs[1].set_title('VPINN')
         for ax in axs:
             ax.set_xlabel(r'$x$')
             ax.set_ylabel(r'$y$', rotation=0)
