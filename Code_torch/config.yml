@@ -6,10 +6,17 @@ seed: 42
 # The space, equation, and external forcing
 space:
   dimension: 2
-  # The domain boundary, given as [[x_0, x_1], [y_0, y_1]]
-  boundary: [[-1, 1], [-1, 1]]
-  # The grid size. For 2d, this should be an array. For 1d, this should be a scalar.
-  grid_size: [15, 15]
+
+  # The domain boundary
+  boundary:
+    x: [-1, 1]
+    y: [-1, 1]
+
+  # The grid size. Should be at least 3.
+  grid_size:
+    x: 5
+    y: 5
+
 PDE:
   type: Poisson
   Helmholtz:
@@ -26,17 +33,19 @@ N_test_functions: 80
 
 # Neural net architecture ......................................................
 architecture:
-  layers: 4
-  nodes_per_layer: 60
+  layers: 6
+  nodes_per_layer: 50
 
 # Training settings ............................................................
-N_iterations: 3000
+N_iterations: 400
 learning_rate: 0.001
 loss_weight: 1
 
 # Plot settings ................................................................
 plots:
-  plot_grid: [500, 500]
+  plot_resolution:
+    x: 100
+    y: 100
   color: blue
   # these are passed to matplotlib.rcParams
   rcParams:

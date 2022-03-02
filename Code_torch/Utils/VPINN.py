@@ -125,11 +125,8 @@ class VPINN(nn.Module):
 
         loss_v = torch.tensor(0.0, requires_grad=True)
 
-        # ---- Breaking change ---------------------------------------------------------
-        # laplace = torch.sum(self.gradgrad(grid.interior, requires_grad=True), dim=1)
-        # ------------------------------------------------------------------------------
+        laplace = torch.sum(self.gradgrad(grid.data, requires_grad=True), dim=1, keepdim=True)
 
-        laplace = self.gradgrad(grid.interior, requires_grad=True)
         for i in range(len(f_integrated.data)):
             q = integrate(laplace, test_func_vals.data[i]) + f_integrated.data[i]
             q = torch.square(q.clone()) / len(f_integrated.data)

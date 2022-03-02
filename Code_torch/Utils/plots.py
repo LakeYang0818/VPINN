@@ -13,12 +13,8 @@ def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
     # 1D plot
     if grid.dim == 1:
 
-        # Draw the grid points
-        for xc in grid.data.numpy():
-            plt.axvline(x=xc, linewidth=1, ls='--')
-
         # Plot the exact solution and the model predictions
-        plt.plot(torch.flatten(grid.data).numpy(), u_exact(torch.flatten(grid.data)).numpy(),
+        plt.plot(grid.data, u_exact(grid.data),
                  color='red', label='exact')
         plt.scatter(np.asarray(torch.flatten(grid.data)), torch.flatten(y_pred),
                     color='black', label='VPINN')
@@ -31,17 +27,28 @@ def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
         # Show the legend
         plt.legend(shadow=True, loc='upper left', fontsize=18, ncol=1)
 
-        # Draw x-axis
-        plt.axhline(0, linewidth=0.8, linestyle='-', color='black')
+        # Draw x-axis and grid
+        plt.axhline(0, linewidth=1, linestyle='-', color='black')
+        plt.grid()
+
 
     # 2d heatmap
     elif grid.dim == 2:
-        plt.imshow(torch.reshape(torch.flatten(y_pred), grid_shape))
 
-        plt.xlabel(r'$x$')
-        plt.ylabel(r'$y$', rotation=0)
+        fig, axs = plt.subplots(1, 2)
+        axs[0].imshow(torch.reshape(u_exact(grid.data), grid_shape))
+        axs[1].imshow(torch.reshape(torch.flatten(y_pred), grid_shape))
+
+        fig.suptitle('Exact and predicted solution')
+
+        axs[0].set_title('Exact solution')
+        axs[1].set_title('VPINNS')
+        for ax in axs:
+            ax.set_xlabel(r'$x$')
+            ax.set_ylabel(r'$y$', rotation=0)
 
     plt.show()
+
 
 # Plots the loss over time
 def plot_loss(loss_tracker: dict):

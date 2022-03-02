@@ -4,8 +4,8 @@ import numpy as np
 import torch
 from typing import Any, Union, Sequence
 
-# Local imports
-from .utils import adapt_input, adapt_output
+# Import function decorator
+from .utils import adapt_input
 
 """Functions used in the VPINNS model"""
 
@@ -13,54 +13,54 @@ from .utils import adapt_input, adapt_output
 
 @adapt_input
 def u(x: Any) -> float:
+    """ The exact solution of the PDE. Make sure the function is defined for the dimension of the grid you
+    are trying to evaluate. Currently only 1D and 2D grids are supported.
 
-    # The 1D function definition
-    def _func_1d(val, as_tensor: bool):
+    :param x: the point at which to evaluate the PDE.
+    :return: the function value at the point
+
+    Raises:
+        ValueError: if a point is passed with dimensionality for which the function is not defined
+    """
+
+    # Define the 1D case
+    if len(x) == 1:
         r1, omega, amp = 5, 4 * np.pi, 1
-        if as_tensor:
-            if isinstance(val, torch.Tensor):
-                return amp * (0.1 * torch.sin(omega * val) + torch.tanh(r1 * val))
-            else:
-                return torch.tensor(amp * (0.1 * torch.sin(omega * val) + torch.tanh(r1 * val)))
-        else:
-            return amp * (0.1 * np.sin(omega * val) + np.tanh(r1 * val))
+        return amp * (0.1 * np.sin(omega * x) + np.tanh(r1 * x))
 
-    # The 2D function definition
-    def _func_2d(val, as_tensor: bool):
-        res = 1
-        for p in val:
-            res *= _func_1d(p, as_tensor)
-        return res
+    # Define the 2D case
+    elif len(x) == 2 :
+        return np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
 
-    return adapt_output(x, _func_1d, _func_2d)
+    else:
+        raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
 
 # ... External forcing .................................................................................................
 
 @adapt_input
 def f(x: Any) -> float:
+    """ The external forcing of the PDE.Make sure the function is defined for the dimension of the grid you
+    are trying to evaluate. Currently only 1D and 2D grids are supported.
 
-    # The 1D function definition
-    def _func_1d(val, as_tensor: bool):
+    :param x: the point at which to evaluate the PDE.
+    :return: the function value at the point
+
+    Raises:
+        ValueError: if a point is passed with dimensionality for which the function is not defined
+    """
+
+    # 1D example
+    if len(x) == 1:
         r1, omega, amp = 5, 4 * np.pi, 1
-        if as_tensor:
-            if isinstance(val, torch.Tensor):
-                return amp * (0.1 * (omega**2) * torch.sin(omega * val)
-                            + (2*r1**2)*torch.tanh(r1 * val.clone().detach())/torch.cosh(r1*val)**2)
-            else:
-                return torch.tensor(amp * (0.1 * (omega**2) * torch.sin(omega * val)
-                                        + (2*r1**2)*torch.tanh(r1 * val)/torch.cosh(r1*val)**2))
-        else:
-            return amp * (0.1 * (omega ** 2) * np.sin(omega * val)
-                            + (2 * r1 ** 2) * np.tanh(r1 * val) / np.cosh(r1 * val)**2)
+        return amp * (0.1 * (omega ** 2) * np.sin(omega * x)
+                      + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
+    # 2D example
+    elif len(x) == 2:
+        return -2*np.pi**2*np.sin(np.pi*x[0])*np.sin(np.pi*x[1])
 
-    # The 2D function definition
-    def _func_2d(val, as_tensor: bool):
-        res = 1
-        for p in val:
-            res *= _func_1d(p, as_tensor)
-        return res
+    else:
+        raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")
 
-    return adapt_output(x, _func_1d, _func_2d)
 
 # ... Test functions ...................................................................................................
 
@@ -80,40 +80,21 @@ def djacobi_poly(x: Any, n: int, *, d: int, a: int, b: int) -> Union[float, Sequ
 
 
 @adapt_input
-def test_function_1d(x: Any, n) -> Union[float, Sequence[float]]:
-    """Returns the test function used for a 1d grid"""
-    return jacobi_poly(x, n+1, a=0, b=0) - jacobi_poly(x, n-1, a=0, b=0)
-
-
-@adapt_input
-def dtest_function_1d(x: Any, n: int, *, d: int) -> Union[float, Sequence[float]]:
-    """Returns the derivative of the test function on a 1d grid"""
-    return djacobi_poly(x, n+1, d=d, a=0, b=0) - djacobi_poly(x, n-1, d=d, a=0, b=0)
-
-
-@adapt_input
-def test_function(point: Union[float, Sequence[float]], n) -> float:
+def test_function(point: Sequence, n) -> float:
     """Returns the test function evaluated at a grid point of arbitrary
     dimension. Higher dimensional test functions are simply products of
     1d test functions.
 
-    Args:
-        point :Union[Sequence, float]: the point at which to evaluate the test function
-        n: the number of the test function
-    Returns:
-        a list of function values on each grid point
+    :param point: the point at which to evaluate the function
+    :param n: the index of the test function
+    :return: the test function value at the point
     """
-    if isinstance(point, torch.Tensor) or isinstance(point, Sequence):
-        res = 1
-        for coord in point:
-            res *= test_function_1d(coord, n)
 
-        if isinstance(point, torch.Tensor):
-            return torch.reshape(torch.tensor([res]), (1,))
-        else:
-            return res
-    else:
-        return test_function_1d(point, n)
+    res = 1
+    for coord in point:
+        res *= jacobi_poly(coord, n + 1, a=0, b=0) - jacobi_poly(coord, n - 1, a=0, b=0)
+
+    return res
 
 
 @adapt_input
@@ -128,20 +109,22 @@ def dtest_function(point: Union[float, Sequence[float]], n, *, d: int) -> Union[
         a list of partial derivatives along each coordinate direction at each grid point. If there is only one
             coordinate dimension, the derivative of the function at that point is returned.
     """
-    if isinstance(point, Sequence):
-        res = []
-        for i in range(len(point)):
-            df_i = dtest_function_1d(point[i], n, d=d)
-            for j in range(len(point)):
-                if j == i:
-                    continue
-                else:
-                    df_i *= test_function_1d(point[j], n)
-            res.append(df_i)
 
-        return res
-    else:
-        return dtest_function_1d(point, n, d=d)
+    def _dtest_function_1d(x: Any, n: int, *, d: int) -> Union[float, Sequence[float]]:
+        """Returns the derivative of the test function on a 1d grid"""
+        return djacobi_poly(x, n + 1, d=d, a=0, b=0) - djacobi_poly(x, n - 1, d=d, a=0, b=0)
+
+    res = []
+    for i in range(len(point)):
+        df_i = _dtest_function_1d(point[i], n, d=d)
+        for j in range(len(point)):
+            if j == i:
+                continue
+            else:
+                df_i *= _dtest_function_1d(point[j], n, d=d)
+        res.append(df_i)
+
+    return res
 
 
 # ... Function integration .............................................................................................

@@ -15,26 +15,21 @@ def validate_cfg(cfg: dict):
     if dim not in {1, 2}:
         raise ValueError(f'Argument {dim} not supported! Dimension must be either 1 or 2!')
     if dim == 1:
-        if isinstance(cfg['space']['grid_size'], Sequence):
-            raise TypeError(f'For dimension {dim} the grid size must be a scalar! '
-                            'Adjust the config.')
         if cfg['PDE']['type'] == 'Burger':
             raise TypeError('The Burgers equation requires a two-dimensional grid!')
-        if isinstance(cfg['space']['grid_size'], Sequence):
-            raise TypeError('The grid size should be a scalar! Adjust the config.')
-        if cfg['space']['grid_size'] == 1:
+        if cfg['space']['grid_size']['x'] < 3:
             raise ValueError("Grid size should be at least 2! Increase grid size.")
     else:
-        if not isinstance(cfg['space']['grid_size'], Sequence):
-            raise TypeError(f'For dimension {dim} the grid size must be a sequence of the form [n_y, n_x]! '
-                            'Adjust the config.')
-        if 1 in cfg['space']['grid_size']:
-            raise ValueError("Grid size should be at least 2! Increase grid size.")
+        if cfg['space']['grid_size']['x'] < 3:
+            raise ValueError("Grid size in dimension 1should be at least 2! Increase grid size.")
+        if cfg['space']['grid_size']['y'] < 3:
+            raise ValueError("Grid size in dimension 1should be at least 2! Increase grid size.")
 
 
-# ... Function decorators ..............................................................................................
+# ... Useful function decorator ........................................................................................
 
-def adapt_input(func=None, *, output_dim: int = 1):
+def adapt_input(func=None, *, dtype=torch.float, requires_grad: bool = False,
+                output_dim: int = 1):
     """Decorator that ensures functions are able to return for different kinds of input.
 
     :param func: the function to be decorated
@@ -51,13 +46,14 @@ def adapt_input(func=None, *, output_dim: int = 1):
 
             # If x is a single point:
             elif x.size() <= torch.Size([1]):
-                return func(x, *args, **kwargs)
+                res = func(x.detach().clone().numpy(), *args, **kwargs)
+                return torch.reshape(torch.tensor([res], dtype=dtype, requires_grad=requires_grad), (1,))
 
             # If x is a list of points
             else:
-                return torch.reshape(
-                    torch.stack([func(x[i], *args, **kwargs) for i in range(len(x))]),
-                    (len(x), output_dim))
+                x = np.resize([x.detach().clone().numpy()], (len(x), len(x[0])))
+                res = [torch.tensor(func(val, *args, *kwargs), dtype=dtype, requires_grad=requires_grad) for val in x]
+                return torch.reshape(torch.stack(res), (len(x), output_dim))
 
         # Evaluate on sequences that are not torch.Tensors
         elif isinstance(x, Sequence):
@@ -81,31 +77,3 @@ def adapt_input(func=None, *, output_dim: int = 1):
             return func(x, *args, **kwargs)
 
     return evaluate
-
-
-def adapt_output(x, func_1d, func_2d):
-    """Decorator that ensures functions return correct return types that can be processed by the neural net.
-
-    :param x: the x value at which the function is to be evaluated
-    :param func_1d: the function if the input is a 1d point
-    :param func_2d: the function for higher dimensional inputs
-    :return: the function value at x
-    """
-
-    if isinstance(x, torch.Tensor):
-
-        # Evaluation on a point with single coordinate
-        if x.size() <= torch.Size([1]):
-            return torch.reshape(func_1d(x, True), (1,))
-
-        # Evaluation on a point with multiple coordinates
-        else:
-            return torch.reshape(func_2d(x, True), (1,))
-
-    elif isinstance(x, Sequence):
-
-        # Evaluation on a point with single coordinate
-        if len(np.shape(x)) <= 1:
-            return np.array([func_1d(x, False)])
-        else:
-            return np.array([func_2d(x, False)])
