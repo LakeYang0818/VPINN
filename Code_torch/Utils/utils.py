@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from typing import Any, Sequence
+
+# Local imports
 from .Types.Grid import Grid
 
 """Utility functions used in the VPINNS model"""
@@ -52,7 +54,7 @@ def adapt_input(func=None, *, dtype=torch.float, requires_grad: bool = False,
             # If x is a list of points
             else:
                 x = np.resize([x.detach().clone().numpy()], (len(x), len(x[0])))
-                res = [torch.tensor(func(val, *args, *kwargs), dtype=dtype, requires_grad=requires_grad) for val in x]
+                res = [torch.tensor(func(val, *args, **kwargs), dtype=dtype, requires_grad=requires_grad) for val in x]
                 return torch.reshape(torch.stack(res), (len(x), output_dim))
 
         # Evaluate on sequences that are not torch.Tensors
@@ -77,3 +79,4 @@ def adapt_input(func=None, *, dtype=torch.float, requires_grad: bool = False,
             return func(x, *args, **kwargs)
 
     return evaluate
+

@@ -37,9 +37,9 @@ class DataSet:
             raise ValueError('Cannot create DataSet with NoneType coordinates!')
         if data is None:
             raise ValueError('Cannot create DataSet with NoneType data values!')
-        if type(coords) != type(data):
-            raise ValueError(f"Arguments 'coords' and 'data' must be of same type, but are of types "
-                             f"{type(coords)} and {type(data)}")
+        # if type(coords) != type(data):
+        #     raise ValueError(f"Arguments 'coords' and 'data' must be of same type, but are of types "
+        #                      f"{type(coords)} and {type(data)}")
 
         if len(coords) != len(data):
             raise ValueError('DataSet coordinate and data dimensions must be equal!')

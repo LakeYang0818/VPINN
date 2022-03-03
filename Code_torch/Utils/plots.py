@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import torch
 
@@ -35,15 +36,33 @@ def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
     # 2d heatmap
     elif grid.dim == 2:
 
-        fig, axs = plt.subplots(1, 2)
-        axs[0].imshow(torch.reshape(u_exact(grid.data), grid_shape))
-        axs[1].imshow(torch.reshape(torch.flatten(y_pred), grid_shape))
+        fig, axs = plt.subplots(1, 3)
+        exact_solution = torch.reshape(u_exact(grid.data), grid_shape)
+        predicted_solution = torch.reshape(torch.flatten(y_pred), grid_shape)
+        err = np.abs(predicted_solution-exact_solution)
+        im1 = axs[0].imshow(exact_solution)
+        im2 = axs[1].imshow(predicted_solution)
+        im3 = axs[2].imshow(err)
+
+        divider = make_axes_locatable(axs[0])
+        cax = divider.append_axes('right', size='5%', pad=0.1)
+        fig.colorbar(im1, cax=cax, orientation='vertical')
+
+        divider = make_axes_locatable(axs[1])
+        cax = divider.append_axes('right', size='5%', pad=0.1)
+        fig.colorbar(im2, cax=cax, orientation='vertical')
+
+        divider = make_axes_locatable(axs[2])
+        cax = divider.append_axes('right', size='5%', pad=0.1)
+        fig.colorbar(im3, cax=cax, orientation='vertical')
 
         fig.suptitle('Exact and predicted solution')
 
         axs[0].set_title('Exact solution')
         axs[1].set_title('VPINN')
+        axs[2].set_title('Error')
         for ax in axs:
+            ax.yaxis.labelpad = 20
             ax.set_xlabel(r'$x$')
             ax.set_ylabel(r'$y$', rotation=0)
 
@@ -70,6 +89,8 @@ def plot_loss(loss_tracker: dict):
 
 # Plots the test functions
 def plot_test_functions(x: Grid, n_test_func: int, *, d: int = 0):
-    for i in range(1, n_test_func):
-        plt.plot(x.data, dtest_function(x.data, i, d=d))
-    plt.show()
+    if x.dim == 1:
+        for i in range(1, n_test_func):
+            plt.plot(x.data, dtest_function(x.data, i, d=d))
+        plt.show()
+

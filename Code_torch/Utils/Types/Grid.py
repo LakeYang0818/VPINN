@@ -57,9 +57,9 @@ class Grid:
             requires_grad = False
 
         if y is not None:
-            if type(x) != type(y):
-                raise ValueError(f"Arguments 'x' and 'y' must be of same type, but are of types "
-                                 f"{type(x)} and {type(y)}")
+            # if type(x) != type(y):
+            #     raise ValueError(f"Arguments 'x' and 'y' must be of same type, but are of types "
+            #                      f"{type(x)} and {type(y)}")
             if isinstance(y, torch.Tensor):
                 if y.size() == torch.Size([0]):
                     raise ValueError(f"Invalid arg 'y' for grid: cannot generate grid from empty tensor.")
@@ -70,22 +70,21 @@ class Grid:
                     warnings.warn(f"You have passed a {type(y)} argument for 'y' but set 'as_tensor = False'. "
                                   f"In this case, 'as_tensor' will be set to true.")
                     as_tensor = True
-                else:
-                    self._n_y = y.size()[0]
+                self._n_y = y.size()[0]
             else:
                 if len(y) == 0:
                     raise ValueError(f"Invalid arg 'y' for grid: cannot generate grid from empty {type(y)}.")
                 else:
-                    self._n_y = len(x)
+                    self._n_y = len(y)
             self._dim = 2
         else:
             self._dim = 1
 
         # Create coordinate axes
         if not as_tensor:
-            self._x = np.array(x).astype(dtype)
+            self._x = np.resize(np.array(x).astype(dtype), (self._n_x, 1))
             self._n_x = len(self._x)
-            self._y = np.array(y).astype(dtype) if y is not None else np.array([])
+            self._y = np.resize(np.array(y).astype(dtype), (self._n_y, 1)) if y is not None else np.array([])
             self._n_y = len(self._y)
             self._dim = 1 + (self._n_y > 1)
         else:
@@ -96,10 +95,10 @@ class Grid:
 
             if y is not None:
                 if isinstance(y, torch.Tensor):
-                    self._y = torch.reshape(torch.tensor(x.detach().clone().numpy(), dtype=dtype),
+                    self._y = torch.reshape(torch.tensor(y.detach().clone().numpy(), dtype=dtype),
                                             (self._n_y, 1))
                 else:
-                    self._y = torch.reshape(torch.tensor(x, dtype=dtype), (self._n_y, 1))
+                    self._y = torch.reshape(torch.tensor(y, dtype=dtype), (self._n_y, 1))
 
         # Create datasets
         if y is None:
@@ -199,6 +198,12 @@ class Grid:
     def y(self):
         return self._y
 
+    @property
+    def volume(self):
+        if self.dim == 1:
+            return self._x[-1]-self._x[0]
+        elif self.dim == 2:
+            return (self._x[-1]-self._x[0])*(self._y[-1]-self._y[0])
 
 # ... Grid constructor ................................................................................................
 

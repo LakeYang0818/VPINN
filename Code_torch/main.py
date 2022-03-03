@@ -6,7 +6,7 @@ import yaml
 # Local imports
 from Utils.Types.Grid import construct_grid, Grid
 from Utils.Types.DataSet import DataSet
-from Utils.functions import f, integrate, u, test_function
+from Utils.functions import evaluate_test_funcs, f, integrate, u
 import Utils.plots as plots
 from Utils.utils import validate_cfg
 from Utils.VPINN import VPINN
@@ -28,38 +28,40 @@ if __name__ == "__main__":
     dim: int = cfg['space']['dimension']
     eq_type: str = cfg['PDE']['type']
     var_form: int = cfg['variational_form']
-    grid_size: Union[int, Sequence[int]] = cfg['space']['grid_size']['x'] if dim == 1 else [cfg['space']['grid_size']['x'], cfg['space']['grid_size']['y']]
-    grid_boundary: Sequence = cfg['space']['boundary']['x'] if dim == 1 else [cfg['space']['boundary']['x'], cfg['space']['boundary']['y']]
+    grid_size: Union[int, Sequence[int]] = cfg['space']['grid_size']['x'] if dim == 1 else [
+        cfg['space']['grid_size']['x'], cfg['space']['grid_size']['y']]
+    grid_boundary: Sequence = cfg['space']['boundary']['x'] if dim == 1 else [cfg['space']['boundary']['x'],
+                                                                              cfg['space']['boundary']['y']]
 
     # Get the neural net architecture from the config
     n_nodes: int = cfg['architecture']['nodes_per_layer']
     n_layers: int = cfg['architecture']['layers']
-    architecture: Union[List[int], Any] = [dim] + [n_nodes] * (n_layers+1) + [1]
+    architecture: Union[List[int], Any] = [dim] + [n_nodes] * (n_layers + 1) + [1]
 
     # Get PDE constants from the config
     PDE_constants: dict = {'Helmholtz': cfg['PDE']['Helmholtz']['k'],
                            'Burger': cfg['PDE']['Burger']['nu']}
 
-    # Get number of test functions used
-    n_test_func: int = cfg['N_test_functions']
+    # Get number of test functions in each dimension
+    test_func_dim: Union[int, Sequence[int]] = cfg['N_test_functions']['x'] if dim == 1 else [
+        cfg['N_test_functions']['x'], cfg['N_test_functions']['y']]
+    n_test_funcs: int = test_func_dim if dim == 1 else test_func_dim[0]*test_func_dim[1]
 
     # Construct the grid
     print("Constructing grid ...")
     grid: Grid = construct_grid(dim, grid_boundary, grid_size, as_tensor=True, requires_grad=False)
 
-    # Evaluate the test functions on grid points. This only needs to be done once.
+    # Evaluate the test functions on grid points.
     print("Evaluating test functions on the grid interior ... ")
-    test_func_vals: DataSet = DataSet(coords=[[i] for i in range(n_test_func)],
-                                      data=[test_function(grid.data, i) for i in range(1, n_test_func + 1)],
-                                      as_tensor=True, requires_grad=False)
+    test_func_vals, idx = evaluate_test_funcs(grid, test_func_dim)
 
     # Integrate the external function over the grid against all the test functions.
-    # This will be used to calculate the variational loss and only needs to be done once.
+    # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
     print("Integrating test functions ...")
-    f_integrated: DataSet = DataSet(coords=[[i] for i in range(n_test_func)],
-                                    data=[integrate(f(grid.data), test_func_vals.data[i])
-                                          for i in range(n_test_func)],
-                                    as_tensor=True, requires_grad=False)
+    f_integrated: DataSet = DataSet(coords=idx,
+                                    data=[integrate(f(grid.interior), test_func_vals[i], grid.volume)
+                                          for i in range(n_test_funcs)], as_tensor=True, requires_grad=False)
+
 
     # Instantiate the model class
     model: VPINN = VPINN(architecture, eq_type, var_form,
@@ -80,7 +82,7 @@ if __name__ == "__main__":
     # Train the model
     print("Commencing training ...")
     loss_w: float = cfg['loss_weight']
-    for it in range(cfg['N_iterations']+1):
+    for it in range(cfg['N_iterations'] + 1):
 
         model.optimizer.zero_grad()
 
@@ -106,7 +108,8 @@ if __name__ == "__main__":
     rcParams.update(cfg['plots']['rcParams'])
 
     # Generate the plot grid, which may be finer than the training grid
-    plot_res = cfg['plots']['plot_resolution']['x'] if dim == 1 else [cfg['plots']['plot_resolution']['x'], cfg['plots']['plot_resolution']['y']]
+    plot_res = cfg['plots']['plot_resolution']['x'] if dim == 1 else [cfg['plots']['plot_resolution']['x'],
+                                                                      cfg['plots']['plot_resolution']['y']]
     plot_grid: Grid = construct_grid(dim, grid_boundary, plot_res, requires_grad=False)
 
     # Get the model predictions on the plotting grid. Turn off tracking for the prediction data.
@@ -117,5 +120,7 @@ if __name__ == "__main__":
 
     # Plot loss over time
     plots.plot_loss(model.loss_tracker)
+
+    # plots.plot_test_functions(plot_grid, n_test_funcs)
 
     print("Done.")

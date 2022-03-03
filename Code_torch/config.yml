@@ -29,17 +29,19 @@ PDE:
 variational_form: 1
 
 # The number of test functions to use. Test functions are Jacobi polynomials.
-N_test_functions: 20
+N_test_functions:
+  x: 10
+  y: 10
 
 # Neural net architecture ......................................................
 architecture:
   layers: 4
-  nodes_per_layer: 10
+  nodes_per_layer: 20
 
 # Training settings ............................................................
-N_iterations: 6000
+N_iterations: 1000
 learning_rate: 0.001
-loss_weight: 0.1
+loss_weight: 10
 
 # Plot settings ................................................................
 plots:
@@ -53,6 +55,6 @@ plots:
     mathtext.fontset: 'stix'
     font.family: 'serif'
     font.size: 20
-    figure.figsize: [14, 9]
+    figure.figsize: [16, 9]
     lines.linewidth: 3
-    figure.autolayout: False
+    figure.autolayout: True
