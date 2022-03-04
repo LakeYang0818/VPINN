@@ -6,7 +6,7 @@ import yaml
 # Local imports
 from Utils.Types.Grid import construct_grid, Grid
 from Utils.Types.DataSet import DataSet
-from Utils.functions import evaluate_test_funcs, f, integrate, u
+from Utils.functions import evaluate_test_funcs, f, integrate, u, dtest_function
 import Utils.plots as plots
 from Utils.utils import validate_cfg
 from Utils.VPINN import VPINN
@@ -54,6 +54,8 @@ if __name__ == "__main__":
     # Evaluate the test functions on grid points.
     print("Evaluating test functions on the grid interior ... ")
     test_func_vals, idx = evaluate_test_funcs(grid, test_func_dim)
+    d1test_func_vals = evaluate_test_funcs(grid, test_func_dim, d=1, output_dim=2)[0] if var_form == 1 else None
+    d2test_func_vals = evaluate_test_funcs(grid, test_func_dim, d=2, output_dim=2)[0] if var_form == 2 else None, None
 
     # Integrate the external function over the grid against all the test functions.
     # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
@@ -88,7 +90,7 @@ if __name__ == "__main__":
 
         # Calculate the loss
         loss_b = model.boundary_loss(training_data)
-        loss_v = model.variational_loss(grid, f_integrated, test_func_vals)
+        loss_v = model.variational_loss(grid, f_integrated, test_func_vals, d1test_func_vals, d2test_func_vals)
         loss = loss_w * loss_b + loss_v
         loss.backward(retain_graph=True)
 
@@ -121,6 +123,6 @@ if __name__ == "__main__":
     # Plot loss over time
     plots.plot_loss(model.loss_tracker)
 
-    # plots.plot_test_functions(plot_grid, n_test_funcs)
+    # plots.plot_test_functions(plot_grid,grid, n_test_funcs, test_func_vals)
 
     print("Done.")

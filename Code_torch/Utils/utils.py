@@ -47,7 +47,7 @@ def adapt_input(func=None, *, dtype=torch.float, requires_grad: bool = False,
                 raise ValueError(f'Cannot evaluate functions on {x.dim()}-dimensional tensor!')
 
             # If x is a single point:
-            elif x.size() <= torch.Size([1]):
+            elif x.dim() == 1:
                 res = func(x.detach().clone().numpy(), *args, **kwargs)
                 return torch.reshape(torch.tensor([res], dtype=dtype, requires_grad=requires_grad), (1,))
 

@@ -4,3 +4,4 @@
 venv/
 __pycache__/
 Examples/hp-VPINNS/main/Poisson-1D/Results/
+Code_torch/Results/*

@@ -14,8 +14,8 @@ space:
 
   # The grid size. Should be at least 3.
   grid_size:
-    x: 20
-    y: 20
+    x: 40
+    y: 40
 
 PDE:
   type: Poisson
@@ -25,23 +25,23 @@ PDE:
     nu: 0.3
 
 # Test function settings .......................................................
-# The variational form to use; can be 1, 2, or 3
+# The variational form to use; can be 0, 1, or 2
 variational_form: 1
 
 # The number of test functions to use. Test functions are Jacobi polynomials.
 N_test_functions:
-  x: 10
-  y: 10
+  x: 30
+  y: 30
 
 # Neural net architecture ......................................................
 architecture:
-  layers: 4
-  nodes_per_layer: 20
+  layers: 1
+  nodes_per_layer: 10
 
 # Training settings ............................................................
-N_iterations: 1000
+N_iterations: 10000
 learning_rate: 0.001
-loss_weight: 10
+loss_weight: 1
 
 # Plot settings ................................................................
 plots:

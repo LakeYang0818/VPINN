@@ -3,7 +3,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import torch
 
-from .functions import dtest_function, u as u_exact
+from .functions import test_function, dtest_function, f, u as u_exact
 from .Types.Grid import Grid
 
 """Plots used in the VPINNS model"""
@@ -40,6 +40,7 @@ def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
         exact_solution = torch.reshape(u_exact(grid.data), grid_shape)
         predicted_solution = torch.reshape(torch.flatten(y_pred), grid_shape)
         err = np.abs(predicted_solution-exact_solution)
+        forcing = torch.reshape(f(grid.data), grid_shape)
         im1 = axs[0].imshow(exact_solution)
         im2 = axs[1].imshow(predicted_solution)
         im3 = axs[2].imshow(err)
@@ -60,7 +61,7 @@ def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
 
         axs[0].set_title('Exact solution')
         axs[1].set_title('VPINN')
-        axs[2].set_title('Error')
+        axs[2].set_title('Pointwise error')
         for ax in axs:
             ax.yaxis.labelpad = 20
             ax.set_xlabel(r'$x$')
@@ -88,9 +89,17 @@ def plot_loss(loss_tracker: dict):
 
 
 # Plots the test functions
-def plot_test_functions(x: Grid, n_test_func: int, *, d: int = 0):
+def plot_test_functions(x: Grid, grid: Grid, n_test_func: int, test_func_vals, *, d: int = 0):
     if x.dim == 1:
-        for i in range(1, n_test_func):
-            plt.plot(x.data, dtest_function(x.data, i, d=d))
-        plt.show()
+        for i in range(1, n_test_func+1):
+            plt.plot(x.data, test_function(x.data, i))
+            plt.plot(grid.interior.detach(), test_func_vals[i-1], marker='x', markersize=10, linewidth=0)
+            plt.show()
+    elif x.dim == 2:
+        for i in range(n_test_func):
+            plt.imshow(torch.reshape(test_func_vals[i], (198, 198)))
+            plt.show()
+        # for i in range(1, n_test_func):
+        #     plt.plot(x.data, dtest_function(x.data, i, d=d))
+        # plt.show()
 
