@@ -1,5 +1,6 @@
 from datetime import datetime
 import matplotlib.pyplot as plt
+from matplotlib import animation
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import os
@@ -7,7 +8,9 @@ import seaborn as sns
 import torch
 import yaml
 
-from .functions import test_function, dtest_function, f, u as u_exact
+import Utils.utils
+from .functions import test_function, dtest_function, u as u_exact
+from .utils import rescale_grid
 from .Types.Grid import Grid
 
 # save plots to new folder
@@ -43,6 +46,27 @@ def info_from_cfg(cfg):
 
 # Plots the prediction value
 def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple):
+
+    # For the Burger's equation, plot four time snaps
+    if cfg['PDE']['type'] == 'Burger':
+        fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
+        axs = np.resize(axs, (1, 4))[0]
+
+        y_pred = torch.reshape(y_pred, (len(grid.x), len(grid.y)))
+
+        for i in range(len(axs)):
+            t = int((len(y_pred)-1)/3*i)
+            axs[i].scatter(grid.x, y_pred[t],
+                       color='black', label='VPINN')
+            if i > 1:
+                axs[i].set_xlabel(r'$x$')
+            if i == 0 or i == 2:
+                axs[i].set_ylabel(r'$y$', rotation=0)
+                axs[i].yaxis.labelpad = 10
+            axs[i].text(0.05, 0.9, fr'$t={np.around(grid.y[-1].numpy()[0]*(t+1)/grid_shape[-1], 3)}$', transform=axs[i].transAxes, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+        fig.savefig('Results/' + folder_name + '/Burger_snapshots.pdf')
+        plt.close()
 
     # 1D plot
     if grid.dim == 1:
@@ -81,50 +105,79 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple):
         plt.savefig('Results/'+folder_name+'/results_1d.pdf')
         plt.close()
 
-
     # 2d heatmap
     elif grid.dim == 2:
+        if cfg['PDE']['type'] != 'Burger':
+            plot_titles = ['Exact solution', 'VPINN prediction', 'Pointwise error', 'Forcing']
+            fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
+            axs = np.resize(axs, (1, 4))[0]
 
-        plot_titles = ['Exact solution', 'VPINN prediction', 'Pointwise error', 'Forcing']
-        fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
-        axs = np.resize(axs, (1, 4))[0]
+            # Generate the datasets
+            exact_solution = torch.reshape(u_exact(grid.data), grid_shape)
+            predicted_solution = torch.reshape(torch.flatten(y_pred), grid_shape)
+            err = np.abs(predicted_solution-exact_solution)
 
-        # Generate the datasets
-        exact_solution = torch.reshape(u_exact(grid.data), grid_shape)
-        predicted_solution = torch.reshape(torch.flatten(y_pred), grid_shape)
-        err = np.abs(predicted_solution-exact_solution)
+            # Plot the heatmaps
+            extent = (grid.x[0].numpy()[0], grid.x[-1].numpy()[0], grid.y[0].numpy()[0], grid.y[-1].numpy()[0])
+            im1 = axs[0].imshow(exact_solution, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
+            im2 = axs[1].imshow(predicted_solution, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
+            im3 = axs[2].imshow(err, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
+            imgs = [im1, im2, im3]
 
-        # Plot the heatmaps
-        extent = (grid.x[0].numpy()[0], grid.x[-1].numpy()[0], grid.y[0].numpy()[0], grid.y[-1].numpy()[0])
-        im1 = axs[0].imshow(exact_solution, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
-        im2 = axs[1].imshow(predicted_solution, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
-        im3 = axs[2].imshow(err, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
-        imgs = [im1, im2, im3]
+            # Add colorbars to all the heatmaps
+            for i in range(len(imgs)):
+                divider = make_axes_locatable(axs[i])
+                cax = divider.append_axes('right', size='5%', pad=0.1)
+                fig.colorbar(imgs[i], cax=cax, orientation='vertical')
+                axs[i].set_title(plot_titles[i])
+                if i > 1:
+                    axs[i].set_xlabel(r'$x$')
+                if i == 0 or i == 2:
+                    axs[i].set_ylabel(r'$y$', rotation=0)
+                    axs[i].yaxis.labelpad = 10
 
-        # Add colorbars to all the heatmaps
-        for i in range(len(imgs)):
-            divider = make_axes_locatable(axs[i])
+            # Write the text box
+            axs[3].axis('off')
+            try:
+                info_str = info_from_cfg(cfg)
+            except:
+                info_str = "(Error obtaining info string; check latex settings)"
+
+            l_inf_err = torch.round(1000*torch.abs(torch.max(err))).numpy()/1000
+            info_str += '\n'+fr"$L^\infty$ error: {l_inf_err}"
+
+            axs[3].text(0.15, 1.0, info_str, transform=axs[3].transAxes,
+                        verticalalignment='top')
+
+        else:
+            fig, axs = plt.subplots(1, 2)
+            axs = np.resize(axs, (1, 2))[0]
+
+            # Generate the datasets
+            predicted_solution = torch.reshape(torch.flatten(y_pred), grid_shape)
+
+            # Plot the heatmaps
+            extent = (grid.x[0].numpy()[0], grid.x[-1].numpy()[0], grid.y[0].numpy()[0], grid.y[-1].numpy()[0])
+            img = axs[0].imshow(predicted_solution, origin='lower', extent=extent,
+                                cmap=sns.color_palette("rocket", as_cmap=True), aspect='auto')
+
+            # Add colorbars to all the heatmaps
+            divider = make_axes_locatable(axs[0])
             cax = divider.append_axes('right', size='5%', pad=0.1)
-            fig.colorbar(imgs[i], cax=cax, orientation='vertical')
-            axs[i].set_title(plot_titles[i])
-            if i > 1:
-                axs[i].set_xlabel(r'$x$')
-            if i == 0 or i == 2:
-                axs[i].set_ylabel(r'$y$', rotation=0)
-                axs[i].yaxis.labelpad = 10
+            fig.colorbar(img, cax=cax, orientation='vertical')
+            axs[0].set_xlabel(r'$x$')
+            axs[0].set_ylabel(r'$y$', rotation=0)
+            axs[0].yaxis.labelpad = 10
 
-        # Write the text box
-        axs[3].axis('off')
-        try:
-            info_str = info_from_cfg(cfg)
-        except:
-            info_str = "(Error obtaining info string; check latex settings)"
+            # Write the text box
+            axs[1].axis('off')
+            try:
+                info_str = info_from_cfg(cfg)
+            except:
+                info_str = "(Error obtaining info string; check latex settings)"
 
-        l_inf_err = torch.round(1000*torch.abs(torch.max(err))).numpy()/1000
-        info_str += '\n'+fr"$L^\infty$ error: {l_inf_err}"
-
-        axs[3].text(0.15, 1.0, info_str, transform=axs[3].transAxes,
-                    verticalalignment='top')
+            axs[1].text(0.15, 1.0, info_str, transform=axs[1].transAxes,
+                        verticalalignment='top')
 
         # Save the file
         fig.savefig('Results/'+folder_name+'/results_2d.pdf')
@@ -157,6 +210,8 @@ def plot_test_functions(grid: Grid, *, order: int, d: int = 1):
     fig, axs = plt.subplots(int(order / 2), 2, sharex=True)
     axs = np.resize(axs, (1, order))[0]
 
+    grid = Utils.utils.rescale_grid(grid)
+
     if grid.dim == 1:
 
         fig.suptitle(fr'First {order} test functions and derivatives')
@@ -187,6 +242,26 @@ def plot_test_functions(grid: Grid, *, order: int, d: int = 1):
             fig.colorbar(img, cax=cax, orientation='vertical')
 
         plt.savefig('Results/' + folder_name + '/test_functions_2d.pdf')
+
+def animate(grid: Grid, y_pred, *, grid_shape: tuple):
+
+    fig = plt.figure()
+    ax = plt.axes(xlim=(-2, 10), ylim=(0, 2))
+    y_pred = torch.reshape(y_pred, (len(grid.x), len(grid.y)))
+    line, = ax.plot([], [], color='black')
+
+    def init():
+        line.set_data(grid.x, y_pred[0])
+        return line,
+
+    def animate(i):
+        t = int((len(y_pred) - 1) / 200 * i)
+        line.set_data(grid.x, y_pred[t])
+        return line,
+
+    anim = animation.FuncAnimation(fig, animate, init_func=init, frames=200, interval=200, blit=True)
+    anim.save(f'Results/' + folder_name + '/animation.mp4', fps=30, extra_args=['-vcodec', 'libx264'])
+
 
 # Writes the config
 def write_config(cfg):

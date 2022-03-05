@@ -5,9 +5,10 @@ import torch
 from typing import Any, Sequence, Union
 
 # Local imports
+import Utils.utils
 from .Types.DataSet import DataSet
 from .Types.Grid import Grid
-from .utils import adapt_input
+from .utils import adapt_input, rescale_grid
 
 """Functions used in the VPINN model"""
 
@@ -34,7 +35,7 @@ def u(x: Any) -> float:
     # Define the 2D case
     elif len(x) == 2:
         # return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
-        return (0.1 * np.sin(2 * np.pi * x[0]) + np.tanh(10 * x[0])) * np.sin(2 * np.pi * x[1])
+        return 1.0/(1+x[0]**2)
 
     else:
         raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
@@ -61,12 +62,12 @@ def f(x: Any) -> float:
                        + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
     # 2D example
     elif len(x) == 2:
-        # return -2 * np.pi ** 2 * u(x)
-        A, B = 0.1, 10
-        return (np.sin(2 * np.pi * x[1]) * (
-                -4 * np.pi ** 2 * A * np.sin(2 * np.pi * x[0]) - 2 * B ** 2 * np.tanh(B * x[0]) * np.cosh(
-            B * x[0]) ** (-2))
-                - 4 * np.pi ** 2 * np.sin(2 * np.pi * x[1]) * (A * np.sin(2 * np.pi * x[0]) + np.tanh(B * x[0])))
+        return 0
+        # A, B = 0.1, 10
+        # return (np.sin(2 * np.pi * x[1]) * (
+        #         -4 * np.pi ** 2 * A * np.sin(2 * np.pi * x[0]) - 2 * B ** 2 * np.tanh(B * x[0]) * np.cosh(
+        #     B * x[0]) ** (-2))
+        #         - 4 * np.pi ** 2 * np.sin(2 * np.pi * x[1]) * (A * np.sin(2 * np.pi * x[0]) + np.tanh(B * x[0])))0
 
     else:
         raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")
@@ -172,6 +173,8 @@ def evaluate_test_funcs(grid: Grid, test_func_dim: Union[int, Sequence[int]], *,
     :return: the test function values and test function indices
     """
     n_test_funcs: int = test_func_dim if grid.dim == 1 else test_func_dim[0] * test_func_dim[1]
+
+    grid = Utils.utils.rescale_grid(grid)
 
     if grid.dim == 1:
 

@@ -80,3 +80,18 @@ def adapt_input(func=None, *, dtype=torch.float, requires_grad: bool = False,
 
     return evaluate
 
+def rescale_grid(grid: Grid) -> Grid:
+    """ Rescales a grid to the [-1, 1] x [-1, 1] interval
+
+    :param grid:
+    :return:
+    """
+    # Rescale grid
+    if grid.dim == 1:
+        return Grid(x=2 * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) - 1, as_tensor=True, requires_grad=False)
+
+    elif grid.dim == 2:
+
+        return Grid(x=2 * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) - 1,
+                    y=2 * (grid.y - grid.y[0]) / (grid.y[-1] - grid.y[0]) - 1,
+                    as_tensor=True, requires_grad=False)

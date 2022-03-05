@@ -129,7 +129,7 @@ class VPINN(nn.Module):
 
         loss_v = torch.tensor(0.0, requires_grad=True)
 
-        if self._eq_type == "Poisson":
+        if self._eq_type == 'Poisson':
             if self._var_form == 0:
 
                 laplace = torch.sum(self.gradgrad(grid.interior, requires_grad=True), dim=1, keepdim=True)
@@ -146,6 +146,16 @@ class VPINN(nn.Module):
                 for i in range(f_integrated.size):
                     q = (-1.0*grid.volume / len(d1test_func_vals[i]) * torch.einsum('ij, ij->', grad, d1test_func_vals[i])
                          - f_integrated.data[i])
+                    q = torch.square(q.clone())
+                    loss_v = loss_v + q
+                    del q
+
+        elif self._eq_type == 'Burger':
+            if self._var_form == 1:
+                u = self.forward(grid.interior)
+                u_vec = torch.reshape(torch.stack([0.5 * torch.square(u), u], dim=1), (len(u), 2))
+                for i in range(f_integrated.size):
+                    q = (grid.volume / len(d1test_func_vals[i]) * torch.einsum('ij, ij->', u_vec, d1test_func_vals[i]))
                     q = torch.square(q.clone())
                     loss_v = loss_v + q
                     del q

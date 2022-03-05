@@ -55,7 +55,7 @@ if __name__ == "__main__":
     print("Evaluating test functions on the grid interior ... ")
     test_func_vals, idx = evaluate_test_funcs(grid, test_func_dim)
     d1test_func_vals = evaluate_test_funcs(grid, test_func_dim, d=1, output_dim=2)[0] if var_form == 1 else None
-    d2test_func_vals = evaluate_test_funcs(grid, test_func_dim, d=2, output_dim=2)[0] if var_form == 2 else None, None
+    d2test_func_vals = evaluate_test_funcs(grid, test_func_dim, d=2, output_dim=2)[0] if var_form == 2 else None
 
     # Integrate the external function over the grid against all the test functions.
     # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     model: VPINN = VPINN(architecture, eq_type, var_form,
                          pde_constants=PDE_constants,
                          learning_rate=cfg['learning_rate'],
-                         activation_func=torch.sin).to(device)
+                         activation_func=torch.tanh).to(device)
 
     # Turn on tracking for the grid
     # Note: this actually only needs to happen for the domain of integration (in our case the interior)
@@ -76,9 +76,15 @@ if __name__ == "__main__":
     grid.interior.requires_grad = True
     grid.boundary.requires_grad = True
 
-    # Prepare the training data. The training data consists of the explicit solution of the function on the boundary
+    # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.
+    # For the Burger's equation, initial data is only given on the lower spacial boundary.
     print("Generating training data ...")
-    training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True, requires_grad=False)
+    if eq_type == 'Burger':
+        lower_boundary = torch.reshape(torch.tensor(list(zip(grid.x, torch.zeros(len(grid.x))))), (len(grid.x), 2))
+        training_data: DataSet = DataSet(coords=lower_boundary, data=u(lower_boundary), as_tensor=True,
+                                         requires_grad=False)
+    else:
+        training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True, requires_grad=False)
 
     # Train the model
     print("Commencing training ...")
@@ -119,14 +125,15 @@ if __name__ == "__main__":
     # Get the model predictions on the plotting grid. Turn off tracking for the prediction data.
     predictions = model.forward(plot_grid.data).detach()
 
+    plots.animate(plot_grid, predictions, grid_shape=plot_res)
     # Plot predicted vs actual values
-    plots.plot_prediction(cfg, plot_grid, predictions, grid_shape=plot_res)
-
-    # Plot loss over time
-    plots.plot_loss(model.loss_tracker)
+    # plots.plot_prediction(cfg, plot_grid, predictions, grid_shape=plot_res)
+    #
+    # # Plot loss over time
+    # plots.plot_loss(model.loss_tracker)
 
     # Plot test functions
-    plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1)
+    # plots.plot_test_functions(plot_grid, order=min(4, n_test_funcs), d=0)
 
     # Save the config
     plots.write_config(cfg)
