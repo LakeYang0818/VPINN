@@ -120,12 +120,15 @@ if __name__ == "__main__":
     predictions = model.forward(plot_grid.data).detach()
 
     # Plot predicted vs actual values
-    plots.plot_prediction(plot_grid, predictions, grid_shape=plot_res)
-    #
-    # # Plot loss over time
+    plots.plot_prediction(cfg, plot_grid, predictions, grid_shape=plot_res)
+
+    # Plot loss over time
     plots.plot_loss(model.loss_tracker)
 
     # Plot test functions
-    # plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1)
+    plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1)
+
+    # Save the config
+    plots.write_config(cfg)
 
     print("Done.")

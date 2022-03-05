@@ -33,8 +33,8 @@ def u(x: Any) -> float:
 
     # Define the 2D case
     elif len(x) == 2:
-        return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
-        # return (0.1 * np.sin(2 * np.pi * x[0]) + np.tanh(10 * x[0])) * np.sin(2 * np.pi * x[1])
+        # return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
+        return (0.1 * np.sin(2 * np.pi * x[0]) + np.tanh(10 * x[0])) * np.sin(2 * np.pi * x[1])
 
     else:
         raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
@@ -61,12 +61,12 @@ def f(x: Any) -> float:
                        + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
     # 2D example
     elif len(x) == 2:
-        return -2 * np.pi ** 2 * u(x)
-        # A, B = 0.1, 10
-        # return (np.sin(2 * np.pi * x[1]) * (
-        #         -4 * np.pi ** 2 * A * np.sin(2 * np.pi * x[0]) - 2 * B ** 2 * np.tanh(B * x[0]) * np.cosh(
-        #     B * x[0]) ** (-2))
-        #         - 4 * np.pi ** 2 * np.sin(2 * np.pi * x[1]) * (A * np.sin(2 * np.pi * x[0]) + np.tanh(B * x[0])))
+        # return -2 * np.pi ** 2 * u(x)
+        A, B = 0.1, 10
+        return (np.sin(2 * np.pi * x[1]) * (
+                -4 * np.pi ** 2 * A * np.sin(2 * np.pi * x[0]) - 2 * B ** 2 * np.tanh(B * x[0]) * np.cosh(
+            B * x[0]) ** (-2))
+                - 4 * np.pi ** 2 * np.sin(2 * np.pi * x[1]) * (A * np.sin(2 * np.pi * x[0]) + np.tanh(B * x[0])))
 
     else:
         raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")
