@@ -14,8 +14,8 @@ space:
 
   # The grid size. Should be at least 3.
   grid_size:
-    x: 40
-    y: 40
+    x: 3
+    y: 3
 
 PDE:
   type: Poisson
@@ -30,31 +30,31 @@ variational_form: 1
 
 # The number of test functions to use. Test functions are Jacobi polynomials.
 N_test_functions:
-  x: 30
-  y: 30
+  x: 3
+  y: 3
 
 # Neural net architecture ......................................................
 architecture:
-  layers: 1
-  nodes_per_layer: 10
+  layers: 4
+  nodes_per_layer: 20
 
 # Training settings ............................................................
-N_iterations: 10000
+N_iterations: 2
 learning_rate: 0.001
-loss_weight: 1
+boundary_loss_weight: 2
+variational_loss_weight: 1
 
 # Plot settings ................................................................
 plots:
   plot_resolution:
-    x: 100
-    y: 100
-  color: blue
+    x: 120
+    y: 120
   # these are passed to matplotlib.rcParams
   rcParams:
     text.usetex: True
     mathtext.fontset: 'stix'
     font.family: 'serif'
-    font.size: 20
-    figure.figsize: [16, 9]
+    font.size: 24
+    figure.figsize: [16, 12]
     lines.linewidth: 3
     figure.autolayout: True

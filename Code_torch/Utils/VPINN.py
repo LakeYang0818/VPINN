@@ -144,7 +144,8 @@ class VPINN(nn.Module):
 
                 grad = self.grad(grid.interior, requires_grad=True)
                 for i in range(f_integrated.size):
-                    q = -grid.volume / len(grad) * torch.einsum('ij, ij->', grad, d1test_func_vals[i]) - f_integrated.data[i]
+                    q = (-1.0*grid.volume / len(d1test_func_vals[i]) * torch.einsum('ij, ij->', grad, d1test_func_vals[i])
+                         - f_integrated.data[i])
                     q = torch.square(q.clone())
                     loss_v = loss_v + q
                     del q

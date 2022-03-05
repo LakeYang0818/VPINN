@@ -45,7 +45,7 @@ if __name__ == "__main__":
     # Get number of test functions in each dimension
     test_func_dim: Union[int, Sequence[int]] = cfg['N_test_functions']['x'] if dim == 1 else [
         cfg['N_test_functions']['x'], cfg['N_test_functions']['y']]
-    n_test_funcs: int = test_func_dim if dim == 1 else test_func_dim[0]*test_func_dim[1]
+    n_test_funcs: int = test_func_dim if dim == 1 else test_func_dim[0] * test_func_dim[1]
 
     # Construct the grid
     print("Constructing grid ...")
@@ -63,7 +63,6 @@ if __name__ == "__main__":
     f_integrated: DataSet = DataSet(coords=idx,
                                     data=[integrate(f(grid.interior), test_func_vals[i], grid.volume)
                                           for i in range(n_test_funcs)], as_tensor=True, requires_grad=False)
-
 
     # Instantiate the model class
     model: VPINN = VPINN(architecture, eq_type, var_form,
@@ -83,7 +82,8 @@ if __name__ == "__main__":
 
     # Train the model
     print("Commencing training ...")
-    loss_w: float = cfg['loss_weight']
+    b_weight: float = cfg['boundary_loss_weight']
+    v_weight: float = cfg['variational_loss_weight']
     for it in range(cfg['N_iterations'] + 1):
 
         model.optimizer.zero_grad()
@@ -91,8 +91,8 @@ if __name__ == "__main__":
         # Calculate the loss
         loss_b = model.boundary_loss(training_data)
         loss_v = model.variational_loss(grid, f_integrated, test_func_vals, d1test_func_vals, d2test_func_vals)
-        loss = loss_w * loss_b + loss_v
-        loss.backward(retain_graph=True)
+        loss = v_weight * loss_v + b_weight * loss_b
+        loss.backward()
 
         # Adjust the model parameters
         model.optimizer.step()
@@ -104,6 +104,8 @@ if __name__ == "__main__":
             model.update_loss_tracker(it, loss_glob, loss_b_glob, loss_v_glob)
         if it % 100 == 0:
             print(f"Iteration {it}: total loss: {loss_glob}, loss_b: {loss_b_glob}, loss_v: {loss_v_glob}")
+
+        del loss
 
     # Plot the results
     print("Plotting ... ")
@@ -119,10 +121,11 @@ if __name__ == "__main__":
 
     # Plot predicted vs actual values
     plots.plot_prediction(plot_grid, predictions, grid_shape=plot_res)
-
-    # Plot loss over time
+    #
+    # # Plot loss over time
     plots.plot_loss(model.loss_tracker)
 
-    # plots.plot_test_functions(plot_grid,grid, n_test_funcs, test_func_vals)
+    # Plot test functions
+    # plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1)
 
     print("Done.")

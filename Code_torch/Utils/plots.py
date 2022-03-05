@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
+import seaborn as sns
 import torch
 
 from .functions import test_function, dtest_function, f, u as u_exact
@@ -31,43 +32,43 @@ def plot_prediction(grid: Grid, y_pred, grid_shape: tuple):
         # Draw x-axis and grid
         plt.axhline(0, linewidth=1, linestyle='-', color='black')
         plt.grid()
+        plt.savefig('Results/results_1d.pdf')
+        plt.close()
 
 
     # 2d heatmap
     elif grid.dim == 2:
 
-        fig, axs = plt.subplots(1, 3)
+        plot_titles = ['Exact solution', 'VPINN prediction', 'Pointwise error', 'Forcing']
+        fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
+        axs = np.resize(axs, (1, 4))[0]
+
         exact_solution = torch.reshape(u_exact(grid.data), grid_shape)
         predicted_solution = torch.reshape(torch.flatten(y_pred), grid_shape)
         err = np.abs(predicted_solution-exact_solution)
         forcing = torch.reshape(f(grid.data), grid_shape)
-        im1 = axs[0].imshow(exact_solution)
-        im2 = axs[1].imshow(predicted_solution)
-        im3 = axs[2].imshow(err)
 
-        divider = make_axes_locatable(axs[0])
-        cax = divider.append_axes('right', size='5%', pad=0.1)
-        fig.colorbar(im1, cax=cax, orientation='vertical')
+        extent = (grid.x[0].numpy()[0], grid.x[-1].numpy()[0], grid.y[0].numpy()[0], grid.y[-1].numpy()[0])
+        im1 = axs[0].imshow(exact_solution, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
+        im2 = axs[1].imshow(predicted_solution, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
+        im3 = axs[2].imshow(err, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
+        im4 = axs[3].imshow(forcing, origin='lower', extent=extent, cmap=sns.color_palette("rocket", as_cmap=True))
 
-        divider = make_axes_locatable(axs[1])
-        cax = divider.append_axes('right', size='5%', pad=0.1)
-        fig.colorbar(im2, cax=cax, orientation='vertical')
+        imgs = [im1, im2, im3, im4]
 
-        divider = make_axes_locatable(axs[2])
-        cax = divider.append_axes('right', size='5%', pad=0.1)
-        fig.colorbar(im3, cax=cax, orientation='vertical')
+        for i in range(len(imgs)):
+            divider = make_axes_locatable(axs[i])
+            cax = divider.append_axes('right', size='5%', pad=0.1)
+            fig.colorbar(imgs[i], cax=cax, orientation='vertical')
+            axs[i].set_title(plot_titles[i])
+            if i > 2:
+                axs[i].set_xlabel(r'$x$')
+            if i == 0 or i == 3:
+                axs[i].set_ylabel(r'$y$', rotation=0)
+                axs[i].yaxis.labelpad = 10
 
-        fig.suptitle('Exact and predicted solution')
-
-        axs[0].set_title('Exact solution')
-        axs[1].set_title('VPINN')
-        axs[2].set_title('Pointwise error')
-        for ax in axs:
-            ax.yaxis.labelpad = 20
-            ax.set_xlabel(r'$x$')
-            ax.set_ylabel(r'$y$', rotation=0)
-
-    plt.show()
+        fig.savefig('Results/results_2d.pdf')
+        plt.close()
 
 
 # Plots the loss over time
@@ -88,18 +89,43 @@ def plot_loss(loss_tracker: dict):
     plt.show()
 
 
-# Plots the test functions
-def plot_test_functions(x: Grid, grid: Grid, n_test_func: int, test_func_vals, *, d: int = 0):
-    if x.dim == 1:
-        for i in range(1, n_test_func+1):
-            plt.plot(x.data, test_function(x.data, i))
-            plt.plot(grid.interior.detach(), test_func_vals[i-1], marker='x', markersize=10, linewidth=0)
-            plt.show()
-    elif x.dim == 2:
-        for i in range(n_test_func):
-            plt.imshow(torch.reshape(test_func_vals[i], (198, 198)))
-            plt.show()
-        # for i in range(1, n_test_func):
-        #     plt.plot(x.data, dtest_function(x.data, i, d=d))
-        # plt.show()
+# Plots the test functions and their derivatives up to order n
+def plot_test_functions(grid: Grid, *, order: int, d: int = 1):
+
+    fig, axs = plt.subplots(int(order / 2), 2, sharex=True)
+    axs = np.resize(axs, (1, order))[0]
+
+    if grid.dim == 1:
+
+        fig.suptitle(fr'First {order} test functions and derivatives')
+
+        for i in range(order):
+            axs[i].axhline(0, linewidth=1, linestyle='-', color='black')
+            axs[i].plot(grid.data, test_function(grid.data, i+1), color='peru', label=fr'$v_{str(i)}(x)$')
+            if d > 0:
+                label_derivs = fr'$v^\prime_{str(i)}(x)$' if d==1 else fr'$d^{str(d)}v_{str(i)}(x)$'
+                axs[i].plot(grid.data, dtest_function(grid.data, i+1, d=d), color='darkred', label=label_derivs)
+            axs[i].legend(ncol=2)
+
+        plt.show()
+        fig.savefig('Results/test_functions_1d.pdf')
+
+    elif grid.dim == 2:
+
+        if d > 0:
+            fig.suptitle(fr'Derivatives of order {d} of test functions')
+        else:
+            fig.suptitle(fr'First {order} test functions')
+
+        extent = (grid.x[0].numpy()[0], grid.x[-1].numpy()[0], grid.y[0].numpy()[0], grid.y[-1].numpy()[0])
+        for i in range(order):
+            img = axs[i].imshow(torch.reshape(torch.prod(dtest_function(grid.data, i+1, d=d), dim=1), (len(grid.x), len(grid.y))),
+                       cmap=sns.color_palette("mako", as_cmap=True), origin='lower', extent=extent)
+            divider = make_axes_locatable(axs[i])
+            cax = divider.append_axes('right', size='5%', pad=0.1)
+            fig.colorbar(img, cax=cax, orientation='vertical')
+
+        plt.show()
+        fig.savefig('Results/dtest_functions_2d.pdf')
+
 

@@ -1,15 +1,15 @@
+import numpy as np
 from scipy.special import gamma
 from scipy.special import jacobi
-import numpy as np
 import torch
 from typing import Any, Sequence, Union
 
-# Import function decorator
+# Local imports
 from .Types.DataSet import DataSet
 from .Types.Grid import Grid
 from .utils import adapt_input
 
-"""Functions used in the VPINNS model"""
+"""Functions used in the VPINN model"""
 
 
 # ... Exact solution ...................................................................................................
@@ -33,7 +33,8 @@ def u(x: Any) -> float:
 
     # Define the 2D case
     elif len(x) == 2:
-        return (0.1 * np.sin(2 * np.pi * x[0]) + np.tanh(10 * x[0])) * np.sin(2 * np.pi * x[1])
+        return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
+        # return (0.1 * np.sin(2 * np.pi * x[0]) + np.tanh(10 * x[0])) * np.sin(2 * np.pi * x[1])
 
     else:
         raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
@@ -60,11 +61,12 @@ def f(x: Any) -> float:
                        + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
     # 2D example
     elif len(x) == 2:
-        A, B = 0.1, 10
-        return (np.sin(2 * np.pi * x[1]) * (
-                -4 * np.pi ** 2 * A * np.sin(2 * np.pi * x[0]) - 2 * B ** 2 * np.tanh(B * x[0]) * np.cosh(
-            B * x[0]) ** (-2))
-                - 4 * np.pi ** 2 * np.sin(2 * np.pi * x[1]) * (A * np.sin(2 * np.pi * x[0]) + np.tanh(B * x[0])))
+        return -2 * np.pi ** 2 * u(x)
+        # A, B = 0.1, 10
+        # return (np.sin(2 * np.pi * x[1]) * (
+        #         -4 * np.pi ** 2 * A * np.sin(2 * np.pi * x[0]) - 2 * B ** 2 * np.tanh(B * x[0]) * np.cosh(
+        #     B * x[0]) ** (-2))
+        #         - 4 * np.pi ** 2 * np.sin(2 * np.pi * x[1]) * (A * np.sin(2 * np.pi * x[0]) + np.tanh(B * x[0])))
 
     else:
         raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")
@@ -88,7 +90,7 @@ def djacobi_poly(x: Any, n: int, *, d: int, a: int, b: int) -> Union[float, Sequ
 
 
 @adapt_input
-def test_function(point: Sequence, n: int) -> float:
+def test_function(point: Any, n: int) -> float:
     """Returns the test function evaluated at a grid point of arbitrary
     dimension. Higher dimensional test functions are simply products of
     1d test functions.
@@ -110,12 +112,15 @@ def dtest_function(point: Union[float, Sequence[float]], n: int, *, d: int, as_t
     """Returns a vector of partial of the nth partial derivatives of the test functions. Since the
     test functions are products of 1d test functions, the partial derivatives simplify considerably.
     Args:
-        point :Union[Sequence, float]: the coordinate values
-        n :int: the number of the test function
-        d :int: the order of the derivatives
+        :param point: the coordinate values
+        :param n: the index of the test function
+        :param d: the order of the derivative
+        :param as_tensor: whether to return a torch.Tensor
+        :param requires_grad: whether the return value requires differentiation
     Returns:
         a list of partial derivatives along each coordinate direction at each grid point. If there is only one
             coordinate dimension, the derivative of the function at that point is returned.
+
     """
 
     if d == 0:
@@ -126,6 +131,8 @@ def dtest_function(point: Union[float, Sequence[float]], n: int, *, d: int, as_t
         return djacobi_poly(x, n + 1, d=d, a=0, b=0) - djacobi_poly(x, n - 1, d=d, a=0, b=0)
 
     res = []
+
+    # To do: implement non-Tensor return type
     if as_tensor:
         # scalar
         if point.size() <= torch.Size([1]):
@@ -134,22 +141,21 @@ def dtest_function(point: Union[float, Sequence[float]], n: int, *, d: int, as_t
         # single point with multiple coords
         elif point.dim() == 1:
             for i in range(len(point)):
-                df_i = _dtest_function_1d(point[i], n, d=d)
+                df_i = 1.0
                 for j in range(len(point)):
                     if j == i:
-                        continue
-                    else:
                         df_i *= _dtest_function_1d(point[j], n, d=d)
+                    else:
+                        df_i *= test_function([point[j]], n)
                 res.append(df_i)
             return torch.tensor(res, requires_grad=requires_grad, dtype=dtype)
 
         # list of points
         else:
-            q = point.size()
             for p in point:
                 res.append(dtest_function(p, n, d=d))
-            v = torch.reshape(torch.tensor(res, requires_grad=requires_grad, dtype=dtype), (len(point), point.size()[-1]))
-            return v
+            return torch.reshape(torch.stack(res), (len(point), point.size()[-1]))
+
 
 # ... Function utilities ...............................................................................................
 
@@ -162,6 +168,7 @@ def evaluate_test_funcs(grid: Grid, test_func_dim: Union[int, Sequence[int]], *,
     :param grid: the grid on which to evaluate the test functions
     :param test_func_dim: the number of test functions in each direction
     :param d: the derivative of the test function to use
+    :param output_dim: the output dimension of the function
     :return: the test function values and test function indices
     """
     n_test_funcs: int = test_func_dim if grid.dim == 1 else test_func_dim[0] * test_func_dim[1]
@@ -180,10 +187,19 @@ def evaluate_test_funcs(grid: Grid, test_func_dim: Union[int, Sequence[int]], *,
     else:
 
         # Get the test function indices in x and y direction
+        test_func_vals_x_0: Sequence = DataSet(coords=[[i] for i in range(test_func_dim[0])],
+                                               data=[dtest_function(grid.x[1:-1], i, d=0) for i in
+                                                     range(1, test_func_dim[0] + 1)],
+                                               as_tensor=True, requires_grad=False).data
         test_func_vals_x: Sequence = DataSet(coords=[[i] for i in range(test_func_dim[0])],
                                              data=[dtest_function(grid.x[1:-1], i, d=d) for i in
                                                    range(1, test_func_dim[0] + 1)],
                                              as_tensor=True, requires_grad=False).data
+
+        test_func_vals_y_0: Sequence = DataSet(coords=[[i] for i in range(test_func_dim[1])],
+                                               data=[dtest_function(grid.y[1:-1], i, d=0) for i in
+                                                     range(1, test_func_dim[1] + 1)],
+                                               as_tensor=True, requires_grad=False).data
         test_func_vals_y: Sequence = DataSet(coords=[[i] for i in range(test_func_dim[1])],
                                              data=[dtest_function(grid.y[1:-1], i, d=d) for i in
                                                    range(1, test_func_dim[1] + 1)],
@@ -194,17 +210,26 @@ def evaluate_test_funcs(grid: Grid, test_func_dim: Union[int, Sequence[int]], *,
                              dtype=int, as_tensor=False).data.tolist()
 
         # Generate the grid of test function values
-        test_func_vals: torch.Tensor = torch.from_numpy(np.array(
-            [Grid(x=test_func_vals_x[idx[i][0]].numpy(),
-                  y=test_func_vals_y[idx[i][1]].numpy(),
-                  dtype=np.float32, as_tensor=False).data
-             for i in range(n_test_funcs)]))
+        if d == 0:
+            test_func_vals: torch.Tensor = torch.from_numpy(np.array(
+                [Grid(x=test_func_vals_x[idx[i][0]].numpy(),
+                      y=test_func_vals_y[idx[i][1]].numpy(),
+                      dtype=np.float32, as_tensor=False).data
+                 for i in range(n_test_funcs)]))
+            test_func_vals = torch.reshape(torch.prod(test_func_vals, dim=2),
+                                           (n_test_funcs, len(grid.interior), 1))
+        else:
 
-        # Multiply test function values together on coordinates
-        if output_dim == 1:
-            test_func_vals = torch.reshape(torch.prod(test_func_vals, dim=2), (n_test_funcs, len(grid.interior), output_dim))
-        # else:
-        #     test_func_vals = torch.reshape(test_func_vals, (n_test_funcs, len(grid.interior), output_dim))
+            test_func_vals = []
+            for k in idx:
+                for y in range(len(grid.y[1:-1])):
+                    for x in range(len(grid.x[1:-1])):
+                        v = [test_func_vals_x[k[0]][x] * test_func_vals_y_0[k[1]][y],
+                             test_func_vals_x_0[k[0]][x] * test_func_vals_y[k[1]][y]]
+                        test_func_vals.append(torch.reshape(torch.stack(v), (2, )))
+
+            test_func_vals = torch.reshape(torch.stack(test_func_vals), (n_test_funcs, len(grid.interior), 2))
+
         test_func_vals.requires_grad = False
 
     return test_func_vals, idx
