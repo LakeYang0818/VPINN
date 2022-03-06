@@ -14,7 +14,7 @@ from ..Types import Grid
 """Plots the model prediction and compares it to the exact solution, if given"""
 
 
-def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple):
+def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = True):
     # For the Burger's equation, plot four time snaps
     if cfg['PDE']['type'] == 'Burger':
         fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
@@ -33,9 +33,11 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple):
                 axs[i].yaxis.labelpad = 10
             axs[i].text(0.05, 0.9, fr'$t={np.around(grid.y[-1].numpy()[0] * (t + 1) / grid_shape[-1], 3)}$',
                         transform=axs[i].transAxes, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-
-        fig.savefig('Results/' + output_dir + '/Burger_snapshots.pdf')
-        plt.close()
+        if show:
+            plt.show()
+        else:
+            fig.savefig('Results/' + output_dir + '/Burger_snapshots.pdf')
+            plt.close()
 
     # 1D plot
     if grid.dim == 1:
@@ -70,7 +72,11 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple):
         # Draw x-axis and grid
         plt.axhline(0, linewidth=1, linestyle='-', color='black')
         plt.grid()
-        plt.savefig('Results/' + output_dir + '/results_1d.pdf')
+        if show:
+            plt.show()
+        else:
+            plt.savefig('Results/' + output_dir + '/results_1d.pdf')
+            plt.close()
 
     # 2d heatmap
     elif grid.dim == 2:
@@ -150,5 +156,8 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple):
                         verticalalignment='top')
 
         # Save the file
-        fig.savefig('Results/' + output_dir + '/results_2d.pdf')
-    plt.close()
+        if show:
+            plt.show()
+        else:
+            fig.savefig('Results/' + output_dir + '/prediction.pdf')
+            plt.close()

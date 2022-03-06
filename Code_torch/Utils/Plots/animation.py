@@ -9,7 +9,7 @@ from ..Types import Grid
 """Animated plot of equation solution over time"""
 
 
-def animate(grid: Grid, y_pred, *, n_frames: int=200, fps: int=30, interval: int=200):
+def animate(grid: Grid, y_pred, *, n_frames: int=200, fps: int=30, interval: int=200, show: bool = False):
     fig = plt.figure()
     ax = plt.axes(xlim=(grid.x[0], grid.x[-1]), ylim=(grid.y[0], grid.y[-1]))
     ax.set_xlabel(r'$x$')
@@ -30,4 +30,7 @@ def animate(grid: Grid, y_pred, *, n_frames: int=200, fps: int=30, interval: int
 
     anim = animation.FuncAnimation(fig, anim, init_func=init, frames=n_frames, interval=interval, blit=True)
     anim.save(f'Results/' + output_dir + '/animation.mp4', fps=fps, extra_args=['-vcodec', 'libx264'])
-    plt.close()
+    if show:
+        plt.show()
+    else:
+        plt.close()

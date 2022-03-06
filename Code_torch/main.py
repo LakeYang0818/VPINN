@@ -73,6 +73,7 @@ if __name__ == "__main__":
                          activation_func=torch.tanh).to(device)
 
     # Turn on tracking for the grid interior, on which the variational loss is calculated
+    grid.boundary.requires_grad = True
     grid.interior.requires_grad = True
 
     # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.

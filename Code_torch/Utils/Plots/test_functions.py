@@ -13,7 +13,7 @@ from ..Types import Grid
 """Plots the test functions and their derivatives up to order n"""
 
 
-def plot_test_functions(grid: Grid, *, order: int, d: int = 1):
+def plot_test_functions(grid: Grid, *, order: int, d: int = 1, show: bool = False):
 
     fig, axs = plt.subplots(int(order / 2), 2, sharex=True)
     axs = np.resize(axs, (1, order))[0]
@@ -51,4 +51,8 @@ def plot_test_functions(grid: Grid, *, order: int, d: int = 1):
             fig.colorbar(img, cax=cax, orientation='vertical')
 
         plt.savefig('Results/' + output_dir + '/test_functions_2d.pdf')
-    plt.close()
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
