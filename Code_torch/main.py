@@ -4,10 +4,12 @@ from typing import Any, List, Sequence, Union
 import yaml
 
 # Local imports
+from function_definitions import f, u
 from Utils.Types.Grid import construct_grid, Grid
 from Utils.Types.DataSet import DataSet
-from Utils.functions import evaluate_test_funcs, f, integrate, u, dtest_function
-import Utils.plots as plots
+from Utils.test_functions import evaluate_test_funcs
+from Utils.utils import integrate
+import Utils.Plots as Plots
 from Utils.utils import validate_cfg
 from Utils.VPINN import VPINN
 
@@ -70,11 +72,8 @@ if __name__ == "__main__":
                          learning_rate=cfg['learning_rate'],
                          activation_func=torch.tanh).to(device)
 
-    # Turn on tracking for the grid
-    # Note: this actually only needs to happen for the domain of integration (in our case the interior)
-    grid.data.requires_grad = True
+    # Turn on tracking for the grid interior, on which the variational loss is calculated
     grid.interior.requires_grad = True
-    grid.boundary.requires_grad = True
 
     # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.
     # For the Burger's equation, initial data is only given on the lower spacial boundary.
@@ -88,8 +87,8 @@ if __name__ == "__main__":
 
     # Train the model
     print("Commencing training ...")
-    b_weight: float = cfg['boundary_loss_weight']
-    v_weight: float = cfg['variational_loss_weight']
+    b_weight, v_weight = cfg['boundary_loss_weight'], cfg['variational_loss_weight']
+
     for it in range(cfg['N_iterations'] + 1):
 
         model.optimizer.zero_grad()
@@ -125,17 +124,20 @@ if __name__ == "__main__":
     # Get the model predictions on the plotting grid. Turn off tracking for the prediction data.
     predictions = model.forward(plot_grid.data).detach()
 
-    plots.animate(plot_grid, predictions, grid_shape=plot_res)
+    # Plot an animation of the predictions
+    if grid.dim == 2 and cfg['plots']['plot_animation']:
+        Plots.animate(plot_grid, predictions)
+
     # Plot predicted vs actual values
-    # plots.plot_prediction(cfg, plot_grid, predictions, grid_shape=plot_res)
-    #
-    # # Plot loss over time
-    # plots.plot_loss(model.loss_tracker)
+    Plots.plot_prediction(cfg, plot_grid, predictions, grid_shape=plot_res)
+
+    # Plot loss over time
+    Plots.plot_loss(model.loss_tracker)
 
     # Plot test functions
-    # plots.plot_test_functions(plot_grid, order=min(4, n_test_funcs), d=0)
+    Plots.plot_test_functions(plot_grid, order=min(4, n_test_funcs), d=0)
 
     # Save the config
-    plots.write_config(cfg)
+    Plots.write_config(cfg)
 
     print("Done.")

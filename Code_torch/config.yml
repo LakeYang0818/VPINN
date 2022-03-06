@@ -1,54 +1,55 @@
 ---
 seed: 42
 
-# PDE settings .................................................................
 
-# The space, equation, and external forcing
+# The space, equation, and external forcing ............................................................................
 space:
   dimension: 2
 
   # The domain boundary
   boundary:
-    x: [-2, 10]
-    y: [0, 2]
+    x: [-1, 1]
+    y: [-1, 1]
 
   # The grid size. Should be at least 3.
   grid_size:
     x: 15
     y: 15
 
+# The PDE parameters ...................................................................................................
 PDE:
-  type: Burger
+  type: Poisson
   Helmholtz:
     k: -0.4
   Burger:
     nu: 0.3
 
-# Test function settings .......................................................
+# Test function settings ...............................................................................................
 # The variational form to use; can be 0, 1, or 2
 variational_form: 1
 
 # The number of test functions to use. Test functions are Jacobi polynomials.
 N_test_functions:
-  x: 20
-  y: 20
+  x: 25
+  y: 25
 
-# Neural net architecture ......................................................
+# Neural net architecture ..............................................................................................
 architecture:
   layers: 4
   nodes_per_layer: 20
 
-# Training settings ............................................................
-N_iterations: 1000
+# Training settings ....................................................................................................
+N_iterations: 2000
 learning_rate: 0.001
 boundary_loss_weight: 3
 variational_loss_weight: 1
 
-# Plot settings ................................................................
+# Plot settings ........................................................................................................
 plots:
   plot_resolution:
     x: 120
     y: 120
+  plot_animation: True
   # these are passed to matplotlib.rcParams
   rcParams:
     text.usetex: True

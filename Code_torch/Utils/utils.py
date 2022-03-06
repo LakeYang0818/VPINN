@@ -36,6 +36,8 @@ def adapt_input(func=None, *, dtype=torch.float, requires_grad: bool = False,
 
     :param func: the function to be decorated
     :param output_dim: the functions output dimension. Is 1 (scalar function) by default
+    :param dtype: the return data type
+    :param requires_grad: whether the grid requires differentiation
     :return: the function output
     """
 
@@ -80,18 +82,44 @@ def adapt_input(func=None, *, dtype=torch.float, requires_grad: bool = False,
 
     return evaluate
 
-def rescale_grid(grid: Grid) -> Grid:
+
+def rescale_grid(grid: Grid, *, as_tensor: bool = True, requires_grad: bool = False) -> Grid:
     """ Rescales a grid to the [-1, 1] x [-1, 1] interval
 
-    :param grid:
-    :return:
+    :param grid: the grid to rescale.
+    :param as_tensor: whether to return a torch.Tensor grid
+    :param requires_grad: whether the rescaled grid requires gradients
+    :return: the rescaled grid
     """
-    # Rescale grid
+
     if grid.dim == 1:
-        return Grid(x=2 * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) - 1, as_tensor=True, requires_grad=False)
+        return Grid(x=2 * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) - 1,
+                    as_tensor=as_tensor, requires_grad=requires_grad)
 
     elif grid.dim == 2:
 
         return Grid(x=2 * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) - 1,
                     y=2 * (grid.y - grid.y[0]) / (grid.y[-1] - grid.y[0]) - 1,
-                    as_tensor=True, requires_grad=False)
+                    as_tensor=as_tensor, requires_grad=requires_grad)
+
+
+def integrate(function_vals: Any, test_func_vals: Any, grid_vol: float, as_tensor: bool = True,
+              dtype=torch.float, requires_grad: bool = False):
+    """
+    Integrates a function against a test function over a domain, using simple quadrature.
+    :param function_vals: the function values on the domain.
+    :param test_func_vals: the function values on the domain.
+    :param grid_vol: the volume of the grid
+    :param as_tensor: whether to return the values as a torch.Tensor
+    :param dtype: the data type to use.
+    :param requires_grad: whether the return values requires differentiation.
+    :return: the value of the integral
+    """
+    if not as_tensor:
+        return grid_vol / len(test_func_vals) * np.sum(function_vals * test_func_vals)
+    else:
+        res = grid_vol / len(test_func_vals) * torch.sum(function_vals * test_func_vals)
+        if isinstance(res, torch.Tensor):
+            return torch.reshape(res, (1,))
+        else:
+            return torch.reshape(torch.tensor(res, dtype=dtype, requires_grad=requires_grad), (1,))

@@ -8,72 +8,10 @@ from typing import Any, Sequence, Union
 import Utils.utils
 from .Types.DataSet import DataSet
 from .Types.Grid import Grid
-from .utils import adapt_input, rescale_grid
+from .utils import adapt_input
 
 """Functions used in the VPINN model"""
 
-
-# ... Exact solution ...................................................................................................
-
-@adapt_input
-def u(x: Any) -> float:
-    """ The exact solution of the PDE. Make sure the function is defined for the dimension of the grid you
-    are trying to evaluate. Currently only 1D and 2D grids are supported.
-
-    :param x: the point at which to evaluate the PDE.
-    :return: the function value at the point
-
-    Raises:
-        ValueError: if a point is passed with dimensionality for which the function is not defined
-    """
-
-    # Define the 1D case
-    if len(x) == 1:
-        r1, omega, amp = 5, 4 * np.pi, 1
-        return amp * (0.1 * np.sin(omega * x) + np.tanh(r1 * x))
-
-    # Define the 2D case
-    elif len(x) == 2:
-        # return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
-        return 1.0/(1+x[0]**2)
-
-    else:
-        raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
-
-
-# ... External forcing .................................................................................................
-
-@adapt_input
-def f(x: Any) -> float:
-    """ The external forcing of the PDE.Make sure the function is defined for the dimension of the grid you
-    are trying to evaluate. Currently only 1D and 2D grids are supported.
-
-    :param x: the point at which to evaluate the PDE.
-    :return: the function value at the point
-
-    Raises:
-        ValueError: if a point is passed with dimensionality for which the function is not defined
-    """
-
-    # 1D example
-    if len(x) == 1:
-        r1, omega, amp = 5, 4 * np.pi, 1
-        return -amp * (0.1 * (omega ** 2) * np.sin(omega * x)
-                       + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
-    # 2D example
-    elif len(x) == 2:
-        return 0
-        # A, B = 0.1, 10
-        # return (np.sin(2 * np.pi * x[1]) * (
-        #         -4 * np.pi ** 2 * A * np.sin(2 * np.pi * x[0]) - 2 * B ** 2 * np.tanh(B * x[0]) * np.cosh(
-        #     B * x[0]) ** (-2))
-        #         - 4 * np.pi ** 2 * np.sin(2 * np.pi * x[1]) * (A * np.sin(2 * np.pi * x[0]) + np.tanh(B * x[0])))0
-
-    else:
-        raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")
-
-
-# ... Test functions ...................................................................................................
 
 def jacobi_poly(x: Any, n: int, *, a: int, b: int) -> Union[float, Sequence[float]]:
     """Returns the Jacobi polynomial of order n"""
@@ -236,25 +174,3 @@ def evaluate_test_funcs(grid: Grid, test_func_dim: Union[int, Sequence[int]], *,
         test_func_vals.requires_grad = False
 
     return test_func_vals, idx
-
-
-def integrate(function_vals: Any, test_func_vals: Any, grid_vol: float, as_tensor: bool = True,
-              dtype=torch.float, requires_grad: bool = False):
-    """
-    Integrates a function against a test function over a domain, using simple quadrature.
-    :param function_vals: the function values on the domain.
-    :param test_func_vals: the function values on the domain.
-    :param grid_vol: the volume of the grid
-    :param as_tensor: whether to return the values as a torch.Tensor
-    :param dtype: the data type to use.
-    :param requires_grad: whether the return values requires differentiation.
-    :return: the value of the integral
-    """
-    if not as_tensor:
-        return grid_vol / len(test_func_vals) * np.sum(function_vals * test_func_vals)
-    else:
-        res = grid_vol / len(test_func_vals) * torch.sum(function_vals * test_func_vals)
-        if isinstance(res, torch.Tensor):
-            return torch.reshape(res, (1,))
-        else:
-            return torch.reshape(torch.tensor(res, dtype=dtype, requires_grad=requires_grad), (1,))

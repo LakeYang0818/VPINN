@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 # Local imports
-from .functions import integrate
+from .utils import integrate
 from .Types.DataSet import DataSet
 from .Types.Grid import Grid
 
