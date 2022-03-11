@@ -1,13 +1,14 @@
 from matplotlib import rcParams
+import time
 import torch
 from typing import Any, List, Sequence, Union
 import yaml
 
 # Local imports
 from function_definitions import f, u
-from Utils.Types.Grid import construct_grid, Grid
-from Utils.Types.DataSet import DataSet
-from Utils.test_functions import evaluate_test_funcs
+from Utils.Datatypes.Grid import construct_grid, Grid
+from Utils.Datatypes.DataSet import DataSet
+from Utils.test_functions import test_function, testfunc_grid_evaluation
 from Utils.utils import integrate
 import Utils.Plots as Plots
 from Utils.utils import validate_cfg
@@ -41,29 +42,44 @@ if __name__ == "__main__":
     architecture: Union[List[int], Any] = [dim] + [n_nodes] * (n_layers + 1) + [1]
 
     # Get PDE constants from the config
-    PDE_constants: dict = {'Helmholtz': cfg['PDE']['Helmholtz']['k'],
-                           'Burger': cfg['PDE']['Burger']['nu']}
+    PDE_constants: dict = {'Burger': cfg['PDE']['Burger']['nu'],
+                           'Helmholtz': cfg['PDE']['Helmholtz']['k'],
+                           'PorousMedium': cfg['PDE']['PorousMedium']['m']}
 
-    # Get number of test functions in each dimension
-    test_func_dim: Union[int, Sequence[int]] = cfg['N_test_functions']['x'] if dim == 1 else [
-        cfg['N_test_functions']['x'], cfg['N_test_functions']['y']]
+    # Get type and number of test functions in each dimension
+    test_func_type: str = cfg['Test functions']['type']
+    test_func_dim: Union[int, Sequence[int]] = cfg['Test functions']['N_test_functions']['x'] if dim == 1 else [
+        cfg['Test functions']['N_test_functions']['x'], cfg['Test functions']['N_test_functions']['y']]
     n_test_funcs: int = test_func_dim if dim == 1 else test_func_dim[0] * test_func_dim[1]
 
     # Construct the grid
     print("Constructing grid ...")
-    grid: Grid = construct_grid(dim, grid_boundary, grid_size, as_tensor=True, requires_grad=False)
+    grid: Grid = construct_grid(dim=dim, boundary=grid_boundary, grid_size=grid_size,
+                                as_tensor=True, requires_grad=False)
 
-    # Evaluate the test functions on grid points.
+    #Evaluate the test functions and any required derivatives on the grid interior
     print("Evaluating test functions on the grid interior ... ")
-    test_func_vals, idx = evaluate_test_funcs(grid, test_func_dim)
-    d1test_func_vals = evaluate_test_funcs(grid, test_func_dim, d=1, output_dim=2)[0] if var_form == 1 else None
-    d2test_func_vals = evaluate_test_funcs(grid, test_func_dim, d=2, output_dim=2)[0] if var_form == 2 else None
+    test_func_vals = testfunc_grid_evaluation(grid, test_func_dim,
+                                              d=0, where='interior', which=test_func_type)
+
+    # Note: In d>1 these are 3-dimensional datasets, because the test function derivatives are vectors.
+    # In d = 1 these are also 2-dimensional, because the test function derivatives will be scalar.
+    d1test_func_vals = testfunc_grid_evaluation(grid, test_func_dim,
+                                                d=1, where='interior', which=test_func_type) if var_form >= 1 else None
+
+    d2test_func_vals = testfunc_grid_evaluation(grid, test_func_dim,
+                                                d=2, where='interior', which=test_func_type) if var_form >= 2 else None
+
+    # Evaluate the test functions on the grid boundary
+    d1test_func_vals_bd = testfunc_grid_evaluation(grid, test_func_dim,
+                                                   d=1, where='boundary',
+                                                   which=test_func_type) if var_form >= 2 else None
 
     # Integrate the external function over the grid against all the test functions.
     # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
     print("Integrating test functions ...")
-    f_integrated: DataSet = DataSet(coords=idx,
-                                    data=[integrate(f(grid.interior), test_func_vals[i], grid.volume)
+    f_integrated: DataSet = DataSet(coords=test_func_vals.coords,
+                                    data=[integrate(f(grid.interior), test_func_vals.data[i], grid.volume)
                                           for i in range(n_test_funcs)], as_tensor=True, requires_grad=False)
 
     # Instantiate the model class
@@ -73,31 +89,33 @@ if __name__ == "__main__":
                          activation_func=torch.tanh).to(device)
 
     # Turn on tracking for the grid interior, on which the variational loss is calculated
-    grid.boundary.requires_grad = True
     grid.interior.requires_grad = True
 
     # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.
-    # For the Burger's equation, initial data is only given on the lower spacial boundary.
+    # For the Burger's and Porous medium equation, training data is the initial data given
+    # on the lower temporal boundary.
     print("Generating training data ...")
-    if eq_type == 'Burger':
-        lower_boundary = torch.reshape(torch.tensor(list(zip(grid.x, torch.zeros(len(grid.x))))), (len(grid.x), 2))
+    if eq_type in ['Burger', 'PorousMedium']:
+        lower_boundary = torch.stack([torch.flatten(grid.x), grid.y[0] * torch.ones(len(grid.x))], dim=1)
         training_data: DataSet = DataSet(coords=lower_boundary, data=u(lower_boundary), as_tensor=True,
                                          requires_grad=False)
     else:
-        training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True, requires_grad=False)
+        training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True,
+                                         requires_grad=False)
 
     # Train the model
     print("Commencing training ...")
     b_weight, v_weight = cfg['boundary_loss_weight'], cfg['variational_loss_weight']
-
+    start_time = time.time()
     for it in range(cfg['N_iterations'] + 1):
 
         model.optimizer.zero_grad()
 
         # Calculate the loss
         loss_b = model.boundary_loss(training_data)
-        loss_v = model.variational_loss(grid, f_integrated, test_func_vals, d1test_func_vals, d2test_func_vals)
-        loss = v_weight * loss_v + b_weight * loss_b
+        loss_v = model.variational_loss(grid, f_integrated, test_func_vals, d1test_func_vals, d2test_func_vals,
+                                        d1test_func_vals_bd)
+        loss = b_weight * loss_b + v_weight * loss_v
         loss.backward()
 
         # Adjust the model parameters
@@ -113,6 +131,8 @@ if __name__ == "__main__":
 
         del loss
 
+    print(f"Training completed in {time.time()-start_time}")
+
     # Plot the results
     print("Plotting ... ")
     rcParams.update(cfg['plots']['rcParams'])
@@ -120,7 +140,8 @@ if __name__ == "__main__":
     # Generate the plot grid, which may be finer than the training grid
     plot_res = cfg['plots']['plot_resolution']['x'] if dim == 1 else [cfg['plots']['plot_resolution']['x'],
                                                                       cfg['plots']['plot_resolution']['y']]
-    plot_grid: Grid = construct_grid(dim, grid_boundary, plot_res, requires_grad=False)
+    plot_grid: Grid = construct_grid(dim=dim, boundary=grid_boundary, grid_size=plot_res,
+                                     requires_grad=False)
 
     # Get the model predictions on the plotting grid. Turn off tracking for the prediction data.
     predictions = model.forward(plot_grid.data).detach()
@@ -136,7 +157,7 @@ if __name__ == "__main__":
     Plots.plot_loss(model.loss_tracker)
 
     # Plot test functions
-    Plots.plot_test_functions(plot_grid, order=min(4, n_test_funcs), d=0)
+    # Plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1, which=test_func_type)
 
     # Save the config
     Plots.write_config(cfg)

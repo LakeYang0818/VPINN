@@ -1,11 +1,11 @@
-# VPINN: Variational physics-informed neural net 
+# VPINN: Variational Physics-Informed Neural Nets 
 ### Daniel Boutros, Thomas Gaskin, Oscar de Wit
 
 A machine learning tool for solving weak non-linear PDEs, developed for the CMI
 core course project at the University of Cambridge. It is based on [work](https://doi.org/10.1016/j.cma.2020.113547) 
-by Ehsan Kharazmi et al. Our code covers 1- and 2-dimensional domains, 
+by Ehsan Kharazmi et al. Our code covers one- and two-dimensional domains, 
 and includes several additional differential equations that can be solved. The model can be controlled from a config file. 
-The code is implemented using [Pytorch](https://pytorch.org/tutorials/).
+The code is implemented using [Pytorch](https://pytorch.org/tutorials/) and is unit-tested.
 
 
 ### Required packages
@@ -13,18 +13,19 @@ The code is implemented using [Pytorch](https://pytorch.org/tutorials/).
 The following packages are required to run the code. We recommend installing these
 into a virtal environment to avoid interfering with system-wide package installations.
 
-| Package    | Version  | Comments                   |
-|------------|----------|----------------------------|
-| Python     | \>= 3.9  |                            |
-| Pytorch    | \>= 1.10 | Machine learning package.  |
-| PyYAML     | \>= 6.0  | Handles configuration      |
-| matplotlib |          | Handles plotting           |
-| latex      |          | Recommended for plotting   |
+| Package    | Version  | Comments                         |
+|------------|----------|----------------------------------|
+| Python     | \>= 3.9  |                                  |
+| Pytorch    | \>= 1.10 | Machine learning package.        |
+| PyYAML     | \>= 6.0  | Handles configuration            |
+| matplotlib |          | Handles plotting                 |
+| latex      |          | Recommended for plotting         |
+| pytest     |          | Optional; used for running tests |
 
-> **_Note:_**  On Apple Silicon, using GPU to train is currently [WIP](https://github.com/pytorch/pytorch/issues/47702).
+> **_Note:_**  On Apple Silicon, using the GPU to train is currently [WIP](https://github.com/pytorch/pytorch/issues/47702).
 > 
-### How to run
-To execute, run the `main.py` file.
+### Running the model
+To execute, run the `main.py` file. Results are stored in the `Results` folder — make sure not to delete it.
 #### Modifying model parameters
 All settings should be modified from the `config.yml` file. The following is a list of the relevant parameters:
 
@@ -52,10 +53,10 @@ To modify the external forcing, go to the `function_definitions.py` file and mod
 be modified in `Utils/test_functions`. One-dimensional test functions must take two inputs: an x-value, and an `int n` which serves as 
 a label for the test function.
 
-### About the code
+### Custom data types
 
-**Custom data types:** We have implemented several custom data types to facilitate handling
-multidimensional data, as well as data on grids. These types are implemented in the `Utils/Types`
+We have implemented several custom data types to facilitate handling
+multidimensional data, as well as data on grids. These types are implemented in the `Utils/Datatypes`
 folder. They are all subscriptable and iterable.
 
 #### The `Grid` class:
@@ -80,3 +81,10 @@ tensorflow types. A `DataSet` contains points and data values --- the former can
 `tf.Tensors`, allowing for them to be passed to a neural net. The `DataSet` can return only the coordinates of 
 a particular axis via `DataSet.axis()`, as well as the shorthands `DataSet.x` and `DataSet.y` for convenience.
 `DataSet.dim` and `DataSet.size` returns the dimensions of the coordinates and the size of the data set respectively.
+
+### Running tests
+
+The code is unit-tested to ensure correct functionality. It is highly recommended that you test 
+any changes or additions you make to the package. To run tests, navigate to the folder containing the `main.py` file, enter your
+virtual environment, and execute `python -m pytest -v Tests/`. This will run *all* tests in the `Tests` folder.
+To run individual tests, simply specify the file you wish to run.

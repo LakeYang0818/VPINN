@@ -2,36 +2,39 @@
 seed: 42
 
 
-# The space, equation, and external forcing ............................................................................
+# Domain settings ......................................................................................................
 space:
   dimension: 2
 
   # The domain boundary
   boundary:
-    x: [-1, 1]
-    y: [-1, 1]
+    x: [-2, 2]
+    y: [0, 2]
 
   # The grid size. Should be at least 3.
   grid_size:
-    x: 15
-    y: 15
+    x: 20
+    y: 20
 
-# The PDE parameters ...................................................................................................
+# PDE parameters .......................................................................................................
 PDE:
-  type: Poisson
+  type: Burger
+  PorousMedium:
+    m: 2
   Helmholtz:
-    k: -0.4
+    k: 5
   Burger:
-    nu: 0.3
+    nu: 0
 
-# Test function settings ...............................................................................................
 # The variational form to use; can be 0, 1, or 2
 variational_form: 1
 
-# The number of test functions to use. Test functions are Jacobi polynomials.
-N_test_functions:
-  x: 25
-  y: 25
+# Test function settings ...............................................................................................
+Test functions:
+  type: Chebyshev
+  N_test_functions:
+    x: 10
+    y: 10
 
 # Neural net architecture ..............................................................................................
 architecture:
@@ -39,17 +42,17 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ....................................................................................................
-N_iterations: 2000
+N_iterations: 3000
 learning_rate: 0.001
-boundary_loss_weight: 3
+boundary_loss_weight: 2
 variational_loss_weight: 1
 
 # Plot settings ........................................................................................................
 plots:
   plot_resolution:
-    x: 120
+    x: 100
     y: 120
-  plot_animation: True
+  plot_animation: False
   # these are passed to matplotlib.rcParams
   rcParams:
     text.usetex: True

@@ -1,8 +1,12 @@
+import numbers
 import numpy as np
 import torch
 from typing import Any
 import warnings
 
+
+# TO DO: the DataSet type should not do any reshaping. All data should be properly reshaped BEFORE being passed
+# to the DataSet!
 
 class DataSet:
 
@@ -37,9 +41,6 @@ class DataSet:
             raise ValueError('Cannot create DataSet with NoneType coordinates!')
         if data is None:
             raise ValueError('Cannot create DataSet with NoneType data values!')
-        # if type(coords) != type(data):
-        #     raise ValueError(f"Arguments 'coords' and 'data' must be of same type, but are of types "
-        #                      f"{type(coords)} and {type(data)}")
 
         if len(coords) != len(data):
             raise ValueError('DataSet coordinate and data dimensions must be equal!')
@@ -50,10 +51,8 @@ class DataSet:
             if coords.dim() > 2:
                 raise ValueError(f"Invalid arg 'coords': cannot generate DataSet from "
                                  f"{coords.dim()}-dimensional coordinates.")
-            if coords.dim() != data.dim():
-                raise ValueError(f"Coordinates and data values must have same shape!")
-            if data.size() == torch.Size([0]):
-                raise ValueError('Cannot create DataSet from empty data values!')
+            # if data.size() == torch.Size([0]):
+            #     raise ValueError('Cannot create DataSet from empty data values!')
             if not as_tensor:
                 warnings.warn(f"You have passed {type(coords)} arguments but set 'as_tensor = False'. "
                               f"In this case, 'as_tensor' will be set to true.")
@@ -65,8 +64,8 @@ class DataSet:
                           "'as_tensor' to 'True' or pass torch.Tensor types as coordinate arguments.")
             requires_grad = False
 
-        self._dim_coords = len(coords[0])
-        self._dim_data = len(data[0])
+        self._dim_coords = 1 if np.shape(coords[0]) in [(), torch.Size([])] else len(coords[0])
+        self._dim_data = 1 if np.shape(data[0]) in [(), torch.Size([])] else len(data[0])
         self._size = len(coords)
 
         # Set the coordinate attributes
@@ -74,30 +73,36 @@ class DataSet:
             self._coords = np.resize(np.array(coords), (len(coords), self._dim_coords)).astype(dtype)
         else:
             if isinstance(coords, torch.Tensor):
-                self._coords = coords
-
+                self._coords = coords.detach().clone()
+                self._coords.requires_grad = requires_grad
             else:
                 coords = [torch.tensor(val, dtype=dtype, requires_grad=requires_grad) for val in coords]
                 self._coords = torch.reshape(torch.stack(coords), (len(coords), self._dim_coords))
 
         # Set the data values
+        # Note: The reshaping will lead to errors if the dimensions are chosen incorrectly. In particular,
+        # this only works for data dimensions up to 3. Incompatible dimensions between training coords
+        # and training data will not lead to visible errors, but rather will lead to a constant loss
+        # function. Consequently, reshaping should NOT occur within DataSet.
         if not as_tensor:
-            self._data = np.resize(np.array(data), (len(coords), self._dim_data)).astype(dtype)
-        else:
-
-            if isinstance(data, torch.Tensor):
-                  self._data = torch.reshape(data,(len(coords), self._dim_data))
+            if len(np.shape(data)) <= 2:
+                self._data = np.resize(np.array(data), (len(coords), self._dim_data)).astype(dtype)
             else:
-                # Note: for some odd reason, reshaping here leads to a breaking change. Don't know why
+                self._data = np.resize(np.array(data), (len(coords), self._dim_data, len(data[0][0]))).astype(dtype)
+        else:
+            if isinstance(data, torch.Tensor):
+                  if len(np.shape(data)) <= 2:
+                      self._data = torch.reshape(data.detach().clone(), (len(coords), self._dim_data))
+                  else:
+                      self._data = torch.reshape(data.detach().clone(), (len(coords), self._dim_data, -1))
+                  self._data.requires_grad = requires_grad
+            else:
                 if isinstance(data[0], torch.Tensor):
-                    self._data = torch.stack([torch.tensor(val.clone().detach().numpy(), dtype=dtype, requires_grad=requires_grad) for val in data])
+                    self._data = torch.stack([torch.tensor(val.clone().detach().numpy(), dtype=dtype,
+                                                           requires_grad=requires_grad) for val in data])
                 else:
                     self._data = torch.stack([torch.tensor(val, dtype=dtype, requires_grad=requires_grad) for val in data])
 
-        # Set requires_grad attributes for torch.Tensors
-        if as_tensor and requires_grad:
-            self._coords.requires_grad = requires_grad
-            self._data.requires_grad = requires_grad
 
     # .. Magic methods .................................................................................................
 

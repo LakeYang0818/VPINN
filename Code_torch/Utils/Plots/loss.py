@@ -5,7 +5,7 @@ from .tools import output_dir
 """Plots the loss over time"""
 
 
-def plot_loss(loss_tracker: dict, *, show: bool = True):
+def plot_loss(loss_tracker: dict, *, show: bool = False):
     # Plot the boundary loss
     plt.plot(loss_tracker['iter'], loss_tracker['loss_b'], label=r'boundary loss', color='darkred')
 

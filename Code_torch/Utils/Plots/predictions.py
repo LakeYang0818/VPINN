@@ -8,24 +8,25 @@ sys.path.append("..")
 
 from function_definitions import u as u_exact
 from .tools import output_dir, info_from_cfg
-from ..Types import Grid
+from ..Datatypes import Grid
 
 
 """Plots the model prediction and compares it to the exact solution, if given"""
 
 
-def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = True):
+def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = False):
     # For the Burger's equation, plot four time snaps
-    if cfg['PDE']['type'] == 'Burger':
+    if cfg['PDE']['type'] in ['Burger', 'PorousMedium']:
         fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
         axs = np.resize(axs, (1, 4))[0]
 
-        y_pred = torch.reshape(y_pred, (len(grid.x), len(grid.y)))
+        y_pred = torch.reshape(y_pred, (len(grid.y), len(grid.x)))
 
         for i in range(len(axs)):
             t = int((len(y_pred) - 1) / 3 * i)
-            axs[i].scatter(grid.x, y_pred[t],
-                           color='black', label='VPINN')
+            j = len(grid.x)
+            j21 = len(y_pred[t])
+            axs[i].scatter(grid.x, y_pred[t], color='black', label='VPINN')
             if i > 1:
                 axs[i].set_xlabel(r'$x$')
             if i == 0 or i == 2:
@@ -36,7 +37,7 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = 
         if show:
             plt.show()
         else:
-            fig.savefig('Results/' + output_dir + '/Burger_snapshots.pdf')
+            fig.savefig('Results/' + output_dir + '/snapshots.pdf')
             plt.close()
 
     # 1D plot
@@ -64,7 +65,7 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = 
             info_str = "(Error obtaining info string; check latex settings)"
 
         # Add L infty norm to info box
-        l_inf_err = np.around(torch.abs(torch.max(torch.subtract(u_exact(grid.data), y_pred))).numpy())
+        l_inf_err = np.around(torch.abs(torch.max(torch.subtract(u_exact(grid.data), y_pred))).numpy(), 5)
         info_str += '\n' + fr"$L^\infty$ error: {l_inf_err}"
 
         ax.text(0.55, 0.08, info_str, transform=ax.transAxes, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))

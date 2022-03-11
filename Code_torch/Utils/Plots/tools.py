@@ -12,7 +12,7 @@ os.makedirs(os.path.join(os.path.join(os.getcwd(), 'Results'), output_dir))
 def info_from_cfg(cfg):
     dim = cfg['space']['dimension']
 
-    pde_info = r"$\textbf{" + f"{dim}-dimensional {cfg['PDE']['type']} equation" + r"}$"
+    pde_info = rf"{dim}-dimensional {cfg['PDE']['type']} equation"
     net_info = f"Neural net: " + \
                f"{cfg['architecture']['layers']} layers, {cfg['architecture']['nodes_per_layer']} neurons per layer "
 
@@ -23,9 +23,9 @@ def info_from_cfg(cfg):
     if dim == 2:
         grid_info += fr", $n_y=${cfg['space']['grid_size']['y']}"
     var_form_info = f"Variational form: {cfg['variational_form']}"
-    test_func_info = fr"Number of test functions: $K_x=$ {cfg['N_test_functions']['x']}"
+    test_func_info = fr"Number of test functions: $K_x=$ {cfg['Test functions']['N_test_functions']['x']}"
     if dim == 2:
-        test_func_info += fr", $K_y=$ {cfg['N_test_functions']['y']}"
+        test_func_info += fr", $K_y=$ {cfg['Test functions']['N_test_functions']['y']}"
     iterations_info = fr"{cfg['N_iterations']} iterations, $\tau_b=${cfg['boundary_loss_weight']}" + \
                       fr", $\tau_v=${cfg['variational_loss_weight']}"
 

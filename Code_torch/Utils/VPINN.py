@@ -2,9 +2,9 @@ import torch
 from torch import nn
 
 # Local imports
-from .utils import integrate
-from .Types.DataSet import DataSet
-from .Types.Grid import Grid
+from .var_forms import calculate_var_loss
+from .Datatypes.DataSet import DataSet
+from .Datatypes.Grid import Grid
 
 
 class VPINN(nn.Module):
@@ -13,9 +13,12 @@ class VPINN(nn.Module):
     VAR_FORMS = {0, 1, 2}
 
     EQUATION_TYPES = {
-        "Poisson",
+        "Burger",
         "Helmholtz",
-        "Burger"
+        "Poisson",
+        "PorousMedium",
+        "Burger",
+        "Weak1D"
     }
 
     def __init__(self, architecture, eq_type, var_form, *,
@@ -118,46 +121,24 @@ class VPINN(nn.Module):
 
     # Calculates the loss on the domain boundary
     def boundary_loss(self, training_data: DataSet):
-        u_x = self.forward(training_data.coords)
-        loss = torch.nn.functional.mse_loss(u_x, training_data.data)
+        u = self.forward(training_data.coords)
+        loss = torch.nn.functional.mse_loss(u, training_data.data)
 
         return loss
 
     # Calculates the variational loss on the interior
-    def variational_loss(self, grid: Grid, f_integrated, test_func_vals,
-                         d1test_func_vals=None, d2test_func_vals=None):
+    def variational_loss(self, grid: Grid, f_integrated: DataSet, test_func_vals: DataSet,
+                         d1test_func_vals: DataSet = None, d2test_func_vals: DataSet = None,
+                         d1test_func_vals_bd: DataSet = None):
 
-        loss_v = torch.tensor(0.0, requires_grad=True)
+        loss_v = calculate_var_loss(
+            self.forward, self.grad, self.gradgrad,
+            grid,
+            f_integrated,
+            test_func_vals, d1test_func_vals, d2test_func_vals, d1test_func_vals_bd,
+            self._var_form,
+            self._eq_type,
+            self._pde_constants
+        )
 
-        if self._eq_type == 'Poisson':
-            if self._var_form == 0:
-
-                laplace = torch.sum(self.gradgrad(grid.interior, requires_grad=True), dim=1, keepdim=True)
-
-                for i in range(f_integrated.size):
-                    q = integrate(laplace, test_func_vals[i], grid.volume) - f_integrated.data[i]
-                    q = torch.square(q.clone())
-                    loss_v = loss_v + q
-                    del q
-
-            elif self._var_form == 1:
-
-                grad = self.grad(grid.interior, requires_grad=True)
-                for i in range(f_integrated.size):
-                    q = (-1.0*grid.volume / len(d1test_func_vals[i]) * torch.einsum('ij, ij->', grad, d1test_func_vals[i])
-                         - f_integrated.data[i])
-                    q = torch.square(q.clone())
-                    loss_v = loss_v + q
-                    del q
-
-        elif self._eq_type == 'Burger':
-            if self._var_form == 1:
-                u = self.forward(grid.interior)
-                u_vec = torch.reshape(torch.stack([0.5 * torch.square(u), u], dim=1), (len(u), 2))
-                for i in range(f_integrated.size):
-                    q = (grid.volume / len(d1test_func_vals[i]) * torch.einsum('ij, ij->', u_vec, d1test_func_vals[i]))
-                    q = torch.square(q.clone())
-                    loss_v = loss_v + q
-                    del q
-
-        return loss_v / len(f_integrated.data)
+        return loss_v
