@@ -1,248 +1,208 @@
-import numpy as np
-import tensorflow as tf
-from tensorflow import keras
-from typing import Any, Sequence
+import torch
+from torch import nn
 
 # Local imports
-from .data_types import DataGrid, DataSet
-from .var_forms import var_sum
+from .Datatypes.DataSet import DataSet
+from .Datatypes.Grid import Grid
+from .Variational_forms import *
 
 
-class VPINN(keras.Model):
-    """ A variational physics-informed neural net. Inherits from the keras.Model parent."""
+class VPINN(nn.Module):
+    """ A variational physics-informed neural net. Inherits from the nn.Module parent."""
 
-    VAR_FORMS = {1, 2, 3}
+    VAR_FORMS = {0, 1, 2}
 
     EQUATION_TYPES = {
-        "Poisson",
+        "Burger",
         "Helmholtz",
-        "Burger"
+        "Poisson",
+        "PorousMedium",
+        "Burger",
+        "Weak1D"
     }
 
-    def __init__(self,
-                 f_integrated: DataSet,
-                 quadrature_data: DataGrid,
-                 quadrature_data_scaled: Sequence[DataGrid],
-                 jacobians: Sequence,
-                 boundary: Sequence,
-                 *,
-                 input_dim: int,
-                 architecture: Sequence[int],
-                 loss_weight: float,
-                 learning_rate: float = 0.01,
-                 var_form: int = 1,
-                 eq_type: str = 'Poisson',
-                 pde_params: dict = None,
-                 activation: Any,
-                 data_type: tf.DType = tf.dtypes.float64):
+    def __init__(self, architecture, eq_type, var_form, *,
+                 pde_constants: dict = None,
+                 learning_rate: float = 0.001,
+                 activation_func=torch.sin):
 
-        """Creates a new variational physics-informed neural network (VPINN). The loss function contains both a
-        strong residual (the values of the network evaluated on training data) and a variational loss, calculated
-        by integrating the network against test functions over the domain.
+        """Initialises the neural net.
 
-        Args:
-            f_integrated :DataSet: the values of the external forcing integrated against all the test functions on the
-                grid. It is used to calculate the
-                variational loss. The coordinates of the DataSet are the test function numbers,
-                and the datasets are the values of the integrals.
-            quadrature_data: the quadrature points
-            quadrature_data_scaled: the quadrature points scaled to the grid
-            jacobians: the jacobians of the coordinate transforms
-            input_dim :int: the dimension of the input data
-            architecture :Sequence: the neural net architecture
-            loss_weight :float: the relative weight of the strong residual to variational residual
-            var_form :int: the variational form to use
-            eq_type :str: the equation type
-            pde_params: the pde parameters
-            activation: the activation function of the neural net
-            data_type :DType: the data type of the layer weights. Default is float64.
+        :param architecture: the neural net architecture
+        :param eq_type: the equation type of the PDE in question
+        :param var_form: the variational form to use for the loss function
+        :param pde_constants: the constants for the pde in use
+        :param learning_rate: the learning rate for the optimizer
+        :param activation_func: the activation function to use
+
         Raises:
-            ValueError: if an invalid 'var_form' argument is passed.
-            ValueError: if an invalid 'eq_type' argument is passed
+            ValueError: if the equation type is unrecognized
+            ValueError: if the variational form is unrecognized
         """
-
-        if var_form not in self.VAR_FORMS:
-            raise ValueError(f"Unrecognized variational_form  "
-                             f"'{var_form}'! "
-                             f"Choose from: [1, 2, 3]")
 
         if eq_type not in self.EQUATION_TYPES:
             raise ValueError(f"Unrecognized equation type "
                              f"'{eq_type}'! "
                              f"Choose from: {', '.join(self.EQUATION_TYPES)}")
 
+        if var_form not in self.VAR_FORMS:
+            raise ValueError(f"Unrecognized variational_form  "
+                             f"'{var_form}'! "
+                             f"Choose from: [1, 2, 3]")
+
         super(VPINN, self).__init__()
+        self.flatten = nn.Flatten()
+        self.input_dim = architecture[0]
+        self.output_dim = architecture[-1]
+        self.hidden_dim = len(architecture) - 2
+        self.activation_func = activation_func
 
-        # The external forcing integrated against every test function over the entire grid
-        self._f_integrated = f_integrated
-        self._n_test_functions = f_integrated.size
+        # Add the neural net layers
+        self.layers = nn.ModuleList()
+        for i in range(len(architecture) - 1):
+            self.layers.append(nn.Linear(architecture[i], architecture[i + 1]))
 
-        # The quadrature data
-        self._quadrature_data = quadrature_data
-        self._quadrature_data_scaled = quadrature_data_scaled
+        # Get Adam optimizer
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
 
-        # The coordinate transform jacobians
-        self._jacobians = jacobians
-
-        # The grid boundary
-        self._boundary = boundary
-
-        # Relative weight
-        self._loss_weight = loss_weight
-
-        # Variational form, equation type and equation params
-        self._var_form = var_form
-        self._eq_type = eq_type
-        self._pde_params = pde_params
-
-        # Initialise the net
-        self._neural_net = keras.Sequential()
-
-        # Add layers with the specified architecture
-        for i in range(len(architecture)):
-            print(f"Adding layer {i + 1} of {len(architecture)} ...")
-            if i == 0:
-                self._neural_net.add(tf.keras.Input(shape=(architecture[i],)))
-                self._neural_net.add(keras.layers.Dense(architecture[i],
-                                                        dtype=data_type,
-                                                        kernel_initializer=tf.keras.initializers.TruncatedNormal(
-                                                            stddev=np.sqrt(2/(architecture[i]+architecture[i+1]), dtype=np.float64)
-                                                        ),
-                                                        bias_initializer=tf.keras.initializers.Zeros(),
-                                                        input_dim=input_dim,
-                                                        activation=activation))
-
-            elif i < len(architecture)-1:
-                self._neural_net.add(keras.layers.Dense(architecture[i],
-                                                        dtype=data_type,
-                                                        kernel_initializer=tf.keras.initializers.TruncatedNormal(
-                                                            stddev=np.sqrt(2/(architecture[i]+architecture[i+1]), dtype=np.float64)
-                                                        ),
-                                                        bias_initializer=tf.keras.initializers.Zeros(),
-                                                        activation=activation))
-            # Add output layer
-            else:
-                self._neural_net.add(keras.layers.Dense(architecture[-1],
-                                                        dtype=data_type,
-                                                        kernel_initializer=tf.keras.initializers.TruncatedNormal(
-                                                            stddev=np.sqrt(2/(architecture[i-1]+architecture[i]), dtype=np.float64)
-                                                        ),
-                                                        bias_initializer=tf.keras.initializers.Zeros(),
-                                                        input_dim=architecture[-2],
-                                                        activation='linear'))
-        self._neural_net.summary()
-
-        self._data_type = data_type
-
-        # Get the optimizer
-        self._optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-
-        # Initialize the loss tracker
+        # Initialize the loss tracker dictionary, which can be used to later evaluate the training progress
         self._loss_tracker: dict = {'iter': [],
                                     'total_loss': [],
                                     'loss_b': [],
                                     'loss_v': []}
 
-    # ... Evaluation functions ...................................................................
+        # Get equation type and variational form
+        self._eq_type = eq_type
+        self._var_form = var_form
+
+        # Get equation parameters
+        self._pde_constants = pde_constants
 
     # Return the model loss values
     @property
     def loss_tracker(self) -> dict:
         return self._loss_tracker
 
+    # Updates the loss tracker with a time value and the loss values
     def update_loss_tracker(self, it, total_loss, loss_b, loss_v):
         self._loss_tracker['iter'].append(it)
         self._loss_tracker['total_loss'].append(total_loss)
         self._loss_tracker['loss_b'].append(loss_b)
         self._loss_tracker['loss_v'].append(loss_v)
 
-    # ... Evaluation functions ...................................................................
+    def reset_loss_tracker(self):
+        self._loss_tracker = {'iter': [], 'total_loss': [], 'loss_b': [], 'loss_v': []}
 
-    @tf.function
-    def evaluate(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
-        """Evaluates the neural net"""
+    # ... Evaluation functions .........................................................................................
 
-        return self._neural_net(x, training=training)
+    # The model forward pass
+    def forward(self, x):
+        for i in range(len(self.layers) - 1):
+            x = self.activation_func(self.layers[i](x))
+        x = self.layers[-1](x)
+        return x
 
-    @tf.function
-    def grad_net(self, x: tf.Tensor) -> tf.Tensor:
-        """Calculates the first derivative of the neural net.
-        Returns a tf.Tensor of derivatives in each coordinate direction."""
+    # Computes the first derivative of the model output. x can be a single tensor or a stack of tensors
+    def grad(self, x, *, requires_grad: bool = True):
+        y = self.forward(x)
+        x = torch.autograd.grad(y, x, grad_outputs=torch.ones_like(y), create_graph=requires_grad)[0]
+        return x
 
-        with tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape:
-            tape.watch(x)
-            y = self.evaluate(x)
-        grad = tape.gradient(y, x)
+    # Computes the second derivative of the model output. x can be a single tensor or a stack of tensors
+    def gradgrad(self, x, *, requires_grad: bool = True):
+        y = self.forward(x)
+        first_derivative = torch.autograd.grad(y, x, grad_outputs=torch.ones_like(y), create_graph=True)[0]
+        second_derivative = torch.autograd.grad(first_derivative, x,
+                                                grad_outputs=torch.ones_like(x), create_graph=requires_grad)[0]
 
-        return grad
+        return second_derivative
 
-    @tf.function
-    def gradgrad_net(self, x: tf.Tensor) -> tf.Tensor:
-        """Calculates the second derivative of the neural net. Returns a tf.Tensor with
-        the values of the second derivatives in each direction"""
+    # ... Loss functions ...............................................................................................
 
-        with tf.GradientTape(watch_accessed_variables=False, persistent=True) as tape:
-            tape.watch(x)
-            y = self.grad_net(x)
-        gradgrad = tape.gradient(y, x)
+    def boundary_loss(self, training_data: DataSet):
+        """Calculates the loss on the domain boundary.
 
-        return gradgrad
+        :param training_data:
+        :return:
+        """
 
-    # ... Loss function ...................................................................
-    def calculate_variational_loss(self, *, n_test_func) -> tf.Tensor:
-        """Calculates the total variational loss over the grid."""
+        # Conduct a forward pass on the training data
+        u = self.forward(training_data.coords)
 
-        u_integrated = var_sum(u=self.evaluate, du=self.grad_net, ddu=self.gradgrad_net,
-                                         n_test_func=n_test_func, quads=self._quadrature_data,
-                                         quads_scaled=self._quadrature_data_scaled,
-                                         jacobians=self._jacobians, grid_boundary=self._boundary,
-                                         var_form=self._var_form, eq_type=self._eq_type,
-                                         dtype=self._data_type, pde_params=self._pde_params)
+        # Calculate the pointwise error
+        loss_b = torch.nn.functional.mse_loss(u, training_data.data)
 
-        return tf.math.squared_difference(u_integrated, self._f_integrated.data[n_test_func])
+        return loss_b
 
-    def calculate_boundary_loss(self, training_data: DataSet) -> tf.Tensor:
-        total_loss = tf.stack([
-            tf.math.squared_difference(self.evaluate(x_train, training=True), y_train)
-        for _, (x_train, y_train) in enumerate(training_data)])
-        return tf.math.reduce_mean(total_loss)
+    def variational_loss(self,
+                         grid: Grid,
+                         f_integrated: DataSet,
+                         test_func_vals: DataSet,
+                         d1test_func_vals: DataSet = None,
+                         d2test_func_vals: DataSet = None,
+                         d1test_func_vals_bd: DataSet = None):
+        """ Calculates the variational loss on the interior.
 
-    def calculate_loss(self, *, x, y):
+        :param grid:
+        :param f_integrated:
+        :param test_func_vals:
+        :param d1test_func_vals:
+        :param d2test_func_vals:
+        :param d1test_func_vals_bd:
+        :return:
+        """
+        if self._eq_type == 'Burger':
+            return Burger(self.forward,
+                          self.grad,
+                          grid,
+                          f_integrated,
+                          test_func_vals,
+                          d1test_func_vals,
+                          self._var_form,
+                          self._pde_constants)
 
-        loss_b = self.calculate_boundary_loss(x=x, y=y)
-        loss_v = self.calculate_variational_loss()
-        loss = tf.add(tf.multiply(tf.constant([self._loss_weight], dtype=self._data_type), loss_b), loss_v)
+        elif self._eq_type == 'Helmholtz':
+            return Helmholtz(self.forward,
+                             self.grad,
+                             self.gradgrad,
+                             grid,
+                             f_integrated,
+                             test_func_vals,
+                             d1test_func_vals,
+                             self._var_form,
+                             self._pde_constants)
 
-        return loss
+        elif self._eq_type == 'Poisson':
+            return Poisson(self.forward,
+                           self.grad,
+                           self.gradgrad,
+                           grid,
+                           f_integrated,
+                           test_func_vals,
+                           d1test_func_vals,
+                           d2test_func_vals,
+                           d1test_func_vals_bd,
+                           self._var_form)
 
-    # ... Model training ...................................................................
-    def train(self, training_data: DataSet, n_iterations: int):
-        """Trains the model using a training DataSet, for n_iterations."""
+        elif self._eq_type == 'PorousMedium':
+            return PorousMedium(self.forward,
+                                self.grad,
+                                self.gradgrad,
+                                grid,
+                                f_integrated,
+                                test_func_vals,
+                                d1test_func_vals,
+                                d2test_func_vals,
+                                d1test_func_vals_bd,
+                                self._var_form,
+                                self._pde_constants)
 
-        for it in range(n_iterations):
-            with tf.GradientTape() as tape:
-                loss_b = self.calculate_boundary_loss(training_data)
-                loss_v = 0
-                for i in range(1, self._n_test_functions):
-                    loss_v += self.calculate_variational_loss(n_test_func=i)
-                loss = loss_b + self._loss_weight*loss_v
-            grads = tape.gradient(loss, self.trainable_variables)
+        elif self._eq_type == 'Weak1D':
+            return Weak1D(self.forward,
+                          grid,
+                          f_integrated,
+                          d1test_func_vals,
+                          self._var_form)
 
-            self._optimizer.apply_gradients(zip(grads, self.trainable_variables))
-            if it % 10==0:
-                self.update_loss_tracker(it, loss, loss_b, loss_v)
-                print(f"Current iteration: {it}; loss: {loss}")
-            # Update the variational loss every 10 iterations
-            # if it % 10 == 0:
-            #     with tf.GradientTape() as tape:
-            #
-            #         loss_v = self.calculate_variational_loss()
-            #
-            #     grads = tape.gradient(loss_v, self.trainable_variables)
-            #     loss = tf.add(tf.multiply(tf.constant([self._loss_weight], dtype=self._data_type),
-            #                               loss_b), loss_v)
-            #     self._optimizer.apply_gradients(zip(grads, self.trainable_variables))
-            #     self.update_loss_tracker(it, loss, loss_b, loss_v)
-
-            if it % 100 == 0:
-                print(f"Current iteration: {it}; loss: {loss}")
+        else:
+            raise ValueError(f'Unrecognised equation type {self._eq_type}!')

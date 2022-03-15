@@ -1,0 +1,47 @@
+N_iterations: 3000
+N_test_functions:
+  x: 20
+  y: 20
+PDE:
+  Burger:
+    nu: 0
+  Helmholtz:
+    k: -0.4
+  PorousMedium:
+    m: 2
+  type: PorousMedium
+architecture:
+  layers: 4
+  nodes_per_layer: 20
+boundary_loss_weight: 1
+learning_rate: 0.001
+plots:
+  plot_animation: true
+  plot_resolution:
+    x: 120
+    y: 120
+  rcParams:
+    figure.autolayout: true
+    figure.figsize:
+    - 16
+    - 12
+    font.family: serif
+    font.size: 24
+    lines.linewidth: 3
+    mathtext.fontset: stix
+    text.usetex: true
+seed: 42
+space:
+  boundary:
+    x:
+    - -2
+    - 2
+    y:
+    - 0.1
+    - 2
+  dimension: 2
+  grid_size:
+    x: 20
+    y: 20
+variational_form: 0
+variational_loss_weight: 3
