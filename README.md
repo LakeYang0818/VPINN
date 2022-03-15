@@ -53,6 +53,22 @@ To modify the external forcing, go to the `function_definitions.py` file and mod
 be modified in `Utils/test_functions`. One-dimensional test functions must take two inputs: an x-value, and an `int n` which serves as 
 a label for the test function.
 
+#### Adding new equation types 
+To let the model solve new equation types, add a new file to the `Utils/Variational_forms.py` folder, and include it in the 
+module by adding it to `Variational_forms/__init__.py`. Return your new 
+variational loss in the `variational_loss` function in the `VPINN` class (`VPINN.py`).
+
+> **_Note:_** It is essential that all your datatypes have the same _dimensions_ when calculating 
+> the losses. If your loss functions stay constant even for a high number of iterations, 
+> this may be indicative of incompatible data dimensions, e.g. between training data and model 
+> predictions. pytorch will not throw an error, but will simply not be able to correctly perform 
+> the backwards pass through the loss calculation. 
+
+> **_Hint:_** We recommend making use of the _testing_ capabilities when implementing new 
+> features (see below). Use the testing tools provided to first write comprehensive tests for whatever it is you wish to implement, 
+> thereby making sure your feature behaves as expected. This will significantly reduce the time you 
+> spend debugging the code.
+> 
 ### Custom data types
 
 We have implemented several custom data types to facilitate handling
@@ -84,7 +100,7 @@ a particular axis via `DataSet.axis()`, as well as the shorthands `DataSet.x` an
 
 ### Running tests
 
-The code is unit-tested to ensure correct functionality. It is highly recommended that you test 
+The code is unit-tested to ensure correct functionality. It is recommended that you test 
 any changes or additions you make to the package. To run tests, navigate to the folder containing the `main.py` file, enter your
 virtual environment, and execute `python -m pytest -v Tests/`. This will run *all* tests in the `Tests` folder.
 To run individual tests, simply specify the file you wish to run.

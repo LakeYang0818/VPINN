@@ -1,0 +1,49 @@
+N_iterations: 3000
+PDE:
+  Burger:
+    nu: 0
+  Helmholtz:
+    k: 5
+  PorousMedium:
+    m: 2
+  type: Helmholtz
+Test functions:
+  N_test_functions:
+    x: 60
+    y: 10
+  type: Legendre
+architecture:
+  layers: 4
+  nodes_per_layer: 20
+boundary_loss_weight: 2
+learning_rate: 0.001
+plots:
+  plot_animation: false
+  plot_resolution:
+    x: 300
+    y: 120
+  rcParams:
+    figure.autolayout: true
+    figure.figsize:
+    - 16
+    - 12
+    font.family: serif
+    font.size: 24
+    lines.linewidth: 3
+    mathtext.fontset: stix
+    text.usetex: true
+seed: 42
+space:
+  boundary:
+    x:
+    - -4
+    - 4
+    y:
+    - 0
+    - 2
+  dimension: 1
+  grid_size:
+    x: 250
+    y: 20
+variational_form: 0
+variational_loss_weight: 1
