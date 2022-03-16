@@ -15,7 +15,7 @@ def test_Grid_initialization():
     x = np.linspace(0., 1., 3)
     y = np.linspace(-1., 1., 3)
 
-    g1 = Grid(x=x, y=y, as_tensor=False, dtype=np.float32)
+    g1 = Grid(x=x, y=y, as_tensor=False, dtype=np.float32, requires_normals=True)
     assert (g1.size == len(x) * len(y))
     assert (g1.volume == (x[-1] - x[0]) * (y[-1] - y[0]))
     assert (g1.dim == 2)
@@ -29,6 +29,7 @@ def test_Grid_initialization():
             assert (p in g1.boundary)
 
     assert (g1.boundary == [[0, -1], [0.5, -1], [1, -1], [1, 0], [1, 1], [0.5, 1], [0, 1], [0., 0]]).all()
+    assert (len(g1.normals) == len(g1.boundary))
 
     g2 = Grid(x=g1.x, y=g1.y, as_tensor=False, dtype=np.float32)
     assert (g2.x == g1.x).all()
@@ -39,31 +40,35 @@ def test_Grid_initialization():
     assert g2.boundary_volume == 6
 
     # Tensor grid type
-    g3 = Grid(x=g2.x, as_tensor=True)
+    g3 = Grid(x=g2.x, as_tensor=True, requires_normals=True)
     assert (g3.dim == 1)
     assert (g3.x.size() == torch.Size([3, 1]))
     assert g3.is_tensor
+    assert (g3.normals.numpy() == [[-1], [1]]).all()
 
-    g4 = Grid(x=g1.x, y=g1.y, dtype=torch.float, requires_grad=True)
+    g4 = Grid(x=g1.x, y=g1.y, dtype=float, requires_grad=True)
 
     assert (g4.dim == g1.dim)
     assert (g4.size == g1.size)
     assert (g4.interior.detach().numpy() == g1.interior).all()
     assert (g4.data.detach().numpy() == g1.data).all()
     assert (g4.boundary.detach().numpy() == g1.boundary).all()
-    assert (g4.dtype == torch.float)
+    assert (g4.dtype == float)
     assert g4.is_tensor
+    assert g4.normals is None
 
     g4 = Grid(x=g4.x, y=g4.y)
 
-    g5 = Grid(x=g1.x, y=g1.y, as_tensor=True, dtype=torch.int)
-    g6 = Grid(x=g1.x, y=g1.y, as_tensor=False, dtype=int)
+    g5 = Grid(x=g1.x, y=g1.y, as_tensor=True, dtype=torch.int, requires_normals=True)
+    g6 = Grid(x=g1.x, y=g1.y, as_tensor=False, dtype=int, requires_normals=True)
 
     assert (g5.dim == g6.dim)
     assert (g5.size == g6.size)
     assert (g5.interior.numpy() == g6.interior).all()
     assert (g5.data.numpy() == g6.data).all()
     assert (g5.boundary.numpy() == g6.boundary).all()
+    assert (len(g5.normals) == len(g5.boundary))
+    assert (len(g6.normals) == len(g6.boundary))
 
     grids = [g1, g2, g3, g4, g5, g6]
 
@@ -76,26 +81,30 @@ def test_Grid_initialization():
 
 # Test the grid construction
 def test_Grid_construction():
-    grid1 = construct_grid(dim=1, boundary=[-1, 1], grid_size=20, as_tensor=False, dtype=np.float64)
+    grid1 = construct_grid(dim=1, boundary=[-1, 1], grid_size=20, as_tensor=False, dtype=np.float64, requires_normals=True)
     assert (grid1.size == 20)
     assert (grid1.dim == 1)
     assert grid1.volume == 2
     assert grid1.boundary_volume == 2
+    assert (grid1.normals == [[-1], [1]]).all()
 
-    grid2 = construct_grid(dim=2, boundary=[[-1, 1], [0, 10]], grid_size=[5, 7])
+    grid2 = construct_grid(dim=2, boundary=[[-1, 1], [0, 10]], grid_size=[5, 7], requires_normals=True)
     assert (grid2.size == 35)
     assert (grid2.dim == 2)
     assert grid2.volume == 20
     assert grid2.boundary_volume == 24
+    assert len(grid2.normals == len(grid2.boundary))
 
 
 # Test grid rescaling to a new domain
 def test_Grid_rescaling():
-    grid1 = construct_grid(dim=2, boundary=[[-4, 4], [0, 10]], grid_size=[9, 19], as_tensor=False, dtype=np.float64)
+    grid1 = construct_grid(dim=2, boundary=[[-4, 4], [0, 10]], grid_size=[9, 19], as_tensor=False, dtype=np.float64,
+                           requires_normals=True)
     grid2 = rescale_grid(grid1, new_domain=[[-1, 1], [-1, 1]])
 
     assert (grid2.size == grid1.size)
     assert (grid2.dim == grid1.dim)
+    assert (len(grid2.normals) == len(grid1.normals))
 
     assert (grid2.boundary[0] == [-1, -1]).all()
 
@@ -118,8 +127,6 @@ def test_Grid_rescaling():
     assert grid5.data[0].requires_grad
     assert (grid4.size == grid5.size)
 
-    grid6 = rescale_grid(grid4, new_domain = [[-1, 1], [0, 1]], requires_grad=False)
+    grid6 = rescale_grid(grid4, new_domain = [[-1, 1], [0, 1]])
     assert grid6.is_tensor
-    assert not grid6.requires_grad
-    assert not grid6.data[0].requires_grad
     assert (grid4.size == grid6.size)

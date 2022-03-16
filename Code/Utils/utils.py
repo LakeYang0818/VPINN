@@ -92,37 +92,47 @@ def adapt_input(func=None, *, dtype=torch.float, requires_grad=False):
     return evaluate
 
 
-def integrate(function_vals: Any, test_func_vals: Any = None, domain_vol: float = 1, as_tensor: bool = True,
-              dtype=torch.float, requires_grad: bool = False):
+def integrate(func_1: Any, func_2: Any = None, *, domain_volume: float = 1, as_tensor: bool = True,
+              requires_grad: bool = False):
     """
-    Integrates a function against a test function over a domain, using simple quadrature.
-    :param function_vals: the function values on the domain.
-    :param test_func_vals: the function values on the domain. If none are passed, the function returns the integral of
+    Integrates a function against another function over a domain, using simple quadrature. If the second function
+    is not given, the first is simply integrated over the domain
+    :param func_1: the function values on the domain.
+    :param func_2: the function values on the domain. If none are passed, the function returns the integral of
         the function over the domain
     :param domain_vol: the volume of the domain
     :param as_tensor: whether to return the values as a torch.Tensor
-    :param dtype: the data type to use.
     :param requires_grad: whether the return values requires differentiation.
     :return: the value of the integral
     """
 
-    if not as_tensor:
-        if np.shape(function_vals) != np.shape(function_vals):
-            raise ValueError(f"Function values and test function values must have same shape, but are of "
-                             f"shapes {np.shape(function_vals)} and {np.shape(function_vals)}.")
-        if test_func_vals is None:
-            test_func_vals = np.array([[1.0] for _ in range(len(function_vals))])
+    if func_2 is None:
 
-        return domain_vol / len(test_func_vals) * np.einsum('i..., i...->...', function_vals, test_func_vals)
+        func_2 = torch.ones_like(func_1) if as_tensor else np.ones_like(func_1)
+
+    elif len(np.shape(func_1)) != len(np.shape(func_2)):
+        raise ValueError(f"Function values and test function values must have same dimension, but are of "
+                         f"dimensions {len(np.shape(func_1))} and {len(np.shape(func_2))}.")
+
+    if not as_tensor:
+        if len(np.shape(func_1)) == 1 or np.shape(func_1)[-1] == 1:
+
+            return domain_volume / len(func_2) * np.einsum('i..., i...->...', func_1, func_2)
+
+        elif np.shape(func_1)[-1] == 2:
+            return domain_volume / len(func_2) * np.einsum('ij..., ij...->...', func_1, func_2)
 
     else:
-        if function_vals.dim() != test_func_vals.dim():
-            raise ValueError(f"Function values and test function values must have same dimension, but are of "
-                             f"dimensions {function_vals.dim()} and {test_func_vals.dim()}.")
-        if test_func_vals is None:
-            test_func_vals = torch.reshape(torch.ones(len(function_vals)), (len(function_vals), 1))
 
-        res = domain_vol / len(test_func_vals) * torch.einsum('i..., i...->...', function_vals, test_func_vals)
+        # scalar case
+        if len(func_1.size()) == 1 or func_1.size()[-1] == 1:
+
+            res = domain_volume / len(func_2) * torch.einsum('i..., i...->...', func_1, func_2)
+
+        # vector valued case
+        elif func_1.size()[-1] == 2:
+
+            res = domain_volume / len(func_2) * torch.einsum('ij..., ij...->...', func_1, func_2)
 
         if isinstance(res, torch.Tensor):
 
@@ -130,4 +140,10 @@ def integrate(function_vals: Any, test_func_vals: Any = None, domain_vol: float 
 
         else:
 
-            return torch.reshape(torch.tensor(res, dtype=dtype, requires_grad=requires_grad), (1,))
+            return torch.reshape(torch.tensor(res, dtype=torch.float, requires_grad=requires_grad), (1,))
+
+
+
+
+
+

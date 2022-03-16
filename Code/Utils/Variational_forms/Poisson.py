@@ -1,6 +1,6 @@
 import torch
 
-from Code_torch.Utils.utils import integrate
+from Code.Utils.utils import integrate
 
 """Variational loss for the Poisson equation"""
 
@@ -41,7 +41,7 @@ def Poisson(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(laplace, test_func_vals.data[i], grid.volume) - f_integrated.data[i])*2**(-1.0*i)
+                integrate(laplace, test_func_vals.data[i], domain_volume=grid.volume) - f_integrated.data[i])#*2**(-1.0*i)
 
     elif var_form == 1:
 
@@ -49,18 +49,18 @@ def Poisson(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(grad, d1test_func_vals.data[i], grid.volume) + f_integrated.data[i])*2**(-1.0*i)
+                integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume) + f_integrated.data[i])*2**(-1.0*i)
 
     elif var_form == 2:
 
         u_bd = u(grid.boundary)
         u_int = u(grid.interior)
 
-        # Need to multiply with normal vector of boundary?
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(u_int, torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True), grid.volume)
-                - u_bd[-1]*d1test_func_vals_bd.data[i][-1] + u_bd[0]*d1test_func_vals_bd.data[i][0]
-                - f_integrated.data[i])*2**(-1.0*i)
+                integrate(u_int, torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True), domain_volume=grid.volume)
+                - integrate(u_bd, torch.sum(torch.mul(d1test_func_vals_bd.data[i], grid.normals), dim=1, keepdim=True),
+                            domain_volume=grid.volume)
+                - f_integrated.data[i])#*2**(-1.0*i)
 
     return loss_v / f_integrated.size

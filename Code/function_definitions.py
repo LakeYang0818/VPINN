@@ -21,8 +21,8 @@ def u(x: Any) -> float:
 
     # Define the 2D case
     elif len(x) == 2:
-        #return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
-        return 1.0/(1+x[0]**2)
+        return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
+        #return 1.0/(1+x[0]**2)
 
     else:
         raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
@@ -40,7 +40,7 @@ def f(x: Any) -> float:
         # return 1.0
     # Define the 2D case
     elif len(x) == 2:
-        return 0
+        return -2*np.pi**2*u(x)
 
 
     else:

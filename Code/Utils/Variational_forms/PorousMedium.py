@@ -1,6 +1,6 @@
 import torch
 
-from Code_torch.Utils.utils import integrate
+from Code.Utils.utils import integrate
 
 """Variational loss for the porous medium equation"""
 

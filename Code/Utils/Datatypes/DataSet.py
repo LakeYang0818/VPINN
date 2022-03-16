@@ -12,8 +12,13 @@ class DataSet:
     """
 
 
-    def __init__(self, *, coords: Any, data: Any,
-                 as_tensor: bool = True, dtype=torch.float, requires_grad: bool = False):
+    def __init__(self,
+                 *,
+                 coords: Any,
+                 data: Any,
+                 as_tensor: bool = True,
+                 dtype=torch.float,
+                 requires_grad: bool = False):
 
         """Constructs a DataSet object
 

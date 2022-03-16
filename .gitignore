@@ -3,8 +3,7 @@
 .vscode/*
 venv/
 __pycache__/
-Examples/hp-VPINNS/main/Poisson-1D/Results/
-Code_torch/Results/*
-!Code_torch/Results/__init__.py
+Code/Results/*
+!Code/Results/__init__.py
 .ipynb_checkpoints
-Code_torch/.pytest_cache/
+Code/.pytest_cache/

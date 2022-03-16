@@ -6,8 +6,14 @@ import warnings
 
 class Grid:
 
-    def __init__(self, x: Sequence, y: Sequence = None,
-                 *, as_tensor: bool = True, dtype=torch.float, requires_grad: bool = False):
+    def __init__(self,
+                 x: Sequence,
+                 y: Sequence = None,
+                 *,
+                 as_tensor: bool = True,
+                 dtype=torch.float,
+                 requires_grad: bool = False,
+                 requires_normals: bool = False):
 
         """Constructs a Grid object. A grid consists of pairs of x- and y values, which may have
         different dimensions. The Grid class contains information on its boundary,
@@ -18,6 +24,7 @@ class Grid:
         :param as_tensor: whether to return the Grid as points of torch.Tensors
         :param dtype: the data type to use
         :param requires_grad: whether the grid points require gradients, if torch.Tensors are being used
+        :paran requires_normals: whether to calculate the grid boundary normal vectors
 
         :raises ValueError: if x and y are of different types
         """
@@ -113,33 +120,60 @@ class Grid:
                         interior.append(point)
 
             #  Collect boundary points. The boundary is the contour of the domain, oriented counter-clockwise
-            lower, right,  upper, left = [], [], [], []
+            lower, right, upper, left = [], [], [], []
             for i in range(self._n_x):
                 if not as_tensor:
                     lower.append([self._x[i], self._y[0]])
-                    upper.append([self._x[len(self._x)-i-1], self._y[-1]])
+                    upper.append([self._x[len(self._x) - i - 1], self._y[-1]])
                 else:
                     lower.append(torch.reshape(torch.stack([self._x[i], self._y[0]]), (1, 2)))
                     upper.append(torch.reshape(torch.stack([self._x[len(self._x) - i - 1], self._y[-1]]), (1, 2)))
-            for j in range(1, self._n_y-1):
+            for j in range(1, self._n_y - 1):
                 if not as_tensor:
                     right.append([self._x[-1], self._y[j]])
-                    left.append([self._x[0], self._y[len(self._y)-j-1]])
+                    left.append([self._x[0], self._y[len(self._y) - j - 1]])
                 else:
                     right.append(torch.reshape(torch.stack([self._x[-1], self._y[j]]), (1, 2)))
-                    left.append(torch.reshape(torch.stack([self._x[0], self._y[len(self._y)-j-1]]), (1, 2)))
+                    left.append(torch.reshape(torch.stack([self._x[0], self._y[len(self._y) - j - 1]]), (1, 2)))
             boundary = lower + right + upper + left
 
             if not as_tensor:
                 self._data = np.resize(np.array(data), (self._n_x * self._n_y, 2))
                 self._boundary = np.resize(np.array(boundary), (2 * (self._n_x + self._n_y - 2), 2))
-                self._interior = np.resize(np.array(interior), ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
+                self._interior = np.resize(np.array(interior),
+                                           ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
             else:
                 self._data = torch.reshape(torch.stack(data), (self._n_x * self._n_y, 2))
                 self._boundary = torch.reshape(torch.stack(boundary), (2 * (self._n_x + self._n_y - 2), 2))
-                self._interior = torch.reshape(torch.stack(interior), ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
+                self._interior = torch.reshape(torch.stack(interior),
+                                               ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
 
             self._size = self._n_x * self._n_y
+
+        # Get the grid boundary normals
+        if requires_normals:
+            if self._dim == 1:
+                if as_tensor:
+                    self._normals = torch.stack([torch.tensor([-1], dtype=dtype), torch.tensor([1], dtype=dtype)])
+                else:
+                    self._normals = np.array([[-1], [1]])
+            else:
+                if as_tensor:
+                    self._normals = torch.stack(
+                        [torch.tensor([0, 1])] * (len(self._x) - 1) +
+                        [torch.tensor([-1, 0])] * (len(self._y) - 1) +
+                        [torch.tensor([0, -1])] * (len(self._x) - 1) +
+                        [torch.tensor([1, 0])] * (len(self._y) - 1)
+                    )
+                else:
+                    self._normals = np.array(
+                        [[0, 1]] * (len(self._x) - 1) +
+                        [[-1, 0]] * (len(self._y) - 1) +
+                        [[0, -1]] * (len(self._x) - 1) +
+                        [[1, 0]] * (len(self._y) - 1)
+                    )
+        else:
+            self._normals = None
 
         # Set requires_gradient flag, if required
         if as_tensor and requires_grad:
@@ -183,7 +217,7 @@ class Grid:
         if self.dim == 1:
             return self._x[-1] - self._x[0]
         elif self.dim == 2:
-            return 2*(self._x[-1] - self._x[0]) + 2*(self._y[-1] - self._y[0])
+            return 2 * (self._x[-1] - self._x[0]) + 2 * (self._y[-1] - self._y[0])
 
     @property
     def data(self):
@@ -202,8 +236,19 @@ class Grid:
         return self._as_tensor
 
     @property
+    def normals(self):
+        return self._normals
+
+    @property
     def size(self):
         return self._size
+
+    @property
+    def volume(self):
+        if self.dim == 1:
+            return self._x[-1] - self._x[0]
+        elif self.dim == 2:
+            return (self._x[-1] - self._x[0]) * (self._y[-1] - self._y[0])
 
     @property
     def x(self):
@@ -212,13 +257,6 @@ class Grid:
     @property
     def y(self):
         return self._y
-
-    @property
-    def volume(self):
-        if self.dim == 1:
-            return self._x[-1] - self._x[0]
-        elif self.dim == 2:
-            return (self._x[-1] - self._x[0]) * (self._y[-1] - self._y[0])
 
     @property
     def dtype(self):
@@ -236,7 +274,8 @@ def construct_grid(*, dim: int,
                    grid_size: Union[int, Sequence[int]],
                    as_tensor: bool = True,
                    dtype=torch.float,
-                   requires_grad: bool = False) -> Grid:
+                   requires_grad: bool = False,
+                   requires_normals: bool = False) -> Grid:
     """Constructs a grid of the given dimension.
 
     :param dim: the dimension of the grid
@@ -245,6 +284,7 @@ def construct_grid(*, dim: int,
     :param as_tensor: whether to return the grid points as tensors
     :param dtype: the datatype of the grid points
     :param requires_grad: whether the grid points require differentiability
+    :param requires_normals: whether the grid boundary normal values need to be calculated
     :return: the grid
     """
 
@@ -259,37 +299,34 @@ def construct_grid(*, dim: int,
     if dim == 1:
 
         return Grid(x=_grid_1d(boundary[0], boundary[1], grid_size),
-                    as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
+                    as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad, requires_normals=requires_normals)
 
     elif dim == 2:
         x: Sequence = _grid_1d(boundary[0][0], boundary[0][1], grid_size[0])
         y: Sequence = _grid_1d(boundary[1][0], boundary[1][1], grid_size[1])
 
-        return Grid(x=x, y=y, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad)
+        return Grid(x=x, y=y, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad,
+                    requires_normals=requires_normals)
 
 
-def rescale_grid(grid: Grid, *, new_domain, as_tensor: bool = None, requires_grad: bool = None) -> Grid:
+def rescale_grid(grid: Grid, *, new_domain) -> Grid:
     """ Rescales a grid to a new domain.
 
     :param grid: the grid to rescale
     :param new_domain: the domain to which to scale the grid
-    :param as_tensor: whether to return a torch.Tensor grid
-    :param requires_grad: whether the rescaled grid requires gradients
     :return: the rescaled grid
 
     :raises ValueError: if a grid is being rescaled to a new domain whose dimension does not match the
         grid dimension.
     """
 
-    as_tensor = as_tensor if as_tensor is not None else grid.is_tensor
-    requires_grad = requires_grad if requires_grad is not None else grid.requires_grad
 
     if grid.dim == 1:
         if np.shape(new_domain) != (2,):
             raise ValueError(f"Cannot rescale 1d grid to {len(np.shape(new_domain))}-dimensional domain!")
 
         return Grid(x=(new_domain[1] - new_domain[0]) * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) + new_domain[0],
-                    as_tensor=as_tensor, dtype=grid.dtype, requires_grad=requires_grad)
+                    as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))
 
     elif grid.dim == 2:
         if np.shape(new_domain) != (2, 2):
@@ -300,4 +337,4 @@ def rescale_grid(grid: Grid, *, new_domain, as_tensor: bool = None, requires_gra
                 0],
             y=(new_domain[1][1] - new_domain[1][0]) * (grid.y - grid.y[0]) / (grid.y[-1] - grid.y[0]) + new_domain[1][
                 0],
-            as_tensor=as_tensor, dtype=grid.dtype, requires_grad=requires_grad)
+            as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))

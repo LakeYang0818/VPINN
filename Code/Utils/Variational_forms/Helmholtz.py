@@ -1,6 +1,6 @@
 import torch
 
-from Code_torch.Utils.utils import integrate
+from Code.Utils.utils import integrate
 
 """Variational loss for the Helmholtz equation"""
 
@@ -24,7 +24,7 @@ def Helmholtz(u,
 
         laplace = torch.sum(ddu(grid.interior, requires_grad=True), dim=1, keepdim=True)
         for i in range(f_integrated.size):
-            q = integrate(laplace, test_func_vals.data[i], grid.volume)
+            q = integrate(laplace, test_func_vals.data[i], domain_volume=grid.volume)
             q = q + k * integrate(u(grid.interior), test_func_vals.data[i], grid.volume)
             q = q - f_integrated.data[i]
             q = torch.square(q.clone())
@@ -39,7 +39,7 @@ def Helmholtz(u,
 
         for i in range(f_integrated.size):
             q = -integral_norm * torch.einsum('ij, ij->', grad, d1test_func_vals.data[i])
-            q = q + k * integrate(u(grid.interior), test_func_vals.data[i], grid.volume)
+            q = q + k * integrate(u(grid.interior), test_func_vals.data[i], domain_volume=grid.volume)
             q = q - f_integrated.data[i]
             q = torch.square(q.clone())
             loss_v = loss_v + q

@@ -4,16 +4,16 @@ seed: 42
 
 # Domain settings ......................................................................................................
 space:
-  dimension: 1
+  dimension: 2
 
   # The domain boundary
   boundary:
     x: [-1, 1]
-    y: [0, 2]
+    y: [-1, 1]
 
   # The grid size. Should be at least 3.
   grid_size:
-    x: 80
+    x: 20
     y: 20
 
 # PDE parameters .......................................................................................................
@@ -27,14 +27,13 @@ PDE:
     nu: 0
 
 # The variational form to use; can be 0, 1, or 2
-variational_form: 0
-
+variational_form: 1
 # Test function settings ...............................................................................................
 Test functions:
   type: Legendre
   N_test_functions:
-    x: 60
-    y: 10
+    x: 20
+    y: 20
 
 # Neural net architecture ..............................................................................................
 architecture:
@@ -42,9 +41,9 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ....................................................................................................
-N_iterations: 5000
+N_iterations: 2000
 learning_rate: 0.001
-boundary_loss_weight: 1
+boundary_loss_weight: 2
 variational_loss_weight: 1
 
 # Plot settings ........................................................................................................
@@ -60,6 +59,6 @@ plots:
     mathtext.fontset: 'stix'
     font.family: 'serif'
     font.size: 24
-    figure.figsize: [16, 8]
+    figure.figsize: [14, 12]
     lines.linewidth: 6
     figure.autolayout: True

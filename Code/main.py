@@ -56,7 +56,7 @@ if __name__ == "__main__":
     # Construct the grid
     print("Constructing grid ...")
     grid: Grid = construct_grid(dim=dim, boundary=grid_boundary, grid_size=grid_size,
-                                as_tensor=True, requires_grad=False)
+                                as_tensor=True, requires_grad=False, requires_normals=(var_form>=2))
 
     # Evaluate the test functions and any required derivatives on the grid interior
     print("Evaluating test functions on the grid interior ... ")
@@ -76,8 +76,10 @@ if __name__ == "__main__":
     # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
     print("Integrating test functions ...")
     f_integrated: DataSet = DataSet(coords=test_func_vals.coords,
-                                    data=[integrate(f(grid.interior), test_func_vals.data[i], grid.volume)
-                                          for i in range(n_test_funcs)], as_tensor=True, requires_grad=False)
+                                    data=[integrate(f(grid.interior), test_func_vals.data[i], domain_volume=grid.volume)
+                                          for i in range(n_test_funcs)],
+                                    as_tensor=True,
+                                    requires_grad=False)
 
     # Instantiate the model class
     model: VPINN = VPINN(architecture, eq_type, var_form,
@@ -155,7 +157,7 @@ if __name__ == "__main__":
     Plots.plot_loss(model.loss_tracker)
 
     # Plot test functions
-    Plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1, which=test_func_type)
+    # Plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1, which=test_func_type)
 
     # Save the config
     Plots.write_config(cfg)
