@@ -56,21 +56,29 @@ if __name__ == "__main__":
     # Construct the grid
     print("Constructing grid ...")
     grid: Grid = construct_grid(dim=dim, boundary=grid_boundary, grid_size=grid_size,
-                                as_tensor=True, requires_grad=False, requires_normals=(var_form>=2))
+                                as_tensor=True, requires_grad=False, requires_normals=(var_form >= 2))
 
     # Evaluate the test functions and any required derivatives on the grid interior
     print("Evaluating test functions on the grid interior ... ")
-    test_func_vals = testfunc_grid_evaluation(grid, test_func_dim,
-                                              d=0, where='interior', which=test_func_type)
-    d1test_func_vals = testfunc_grid_evaluation(grid, test_func_dim,
-                                                d=1, where='interior', which=test_func_type) if var_form >= 1 else None
-    d2test_func_vals = testfunc_grid_evaluation(grid, test_func_dim,
-                                                d=2, where='interior', which=test_func_type) if var_form >= 2 else None
+    test_func_vals: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
+                                                       d=0, where='interior', which=test_func_type)
+    d1test_func_vals: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
+                                                         d=1, where='interior',
+                                                         which=test_func_type) if var_form >= 1 else None
+    d2test_func_vals: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
+                                                         d=2, where='interior',
+                                                         which=test_func_type) if var_form >= 2 else None
 
     # Evaluate the test functions on the grid boundary
-    d1test_func_vals_bd = testfunc_grid_evaluation(grid, test_func_dim,
-                                                   d=1, where='boundary',
-                                                   which=test_func_type) if var_form >= 2 else None
+    d1test_func_vals_bd: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
+                                                            d=1, where='boundary',
+                                                            which=test_func_type) if var_form >= 2 else None
+
+    # The weight function for the test functions. Takes an index or a tuple of indices
+    if cfg['Test functions']['weighting']:
+        weight_function = lambda x: 2 ** (-x[0]) * 2 ** (-x[1]) if dim == 2 else 2 ** (-x)
+    else:
+        weight_function = lambda x: 1
 
     # Integrate the external function over the grid against all the test functions.
     # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
@@ -113,7 +121,7 @@ if __name__ == "__main__":
         # Calculate the loss
         loss_b = model.boundary_loss(training_data)
         loss_v = model.variational_loss(grid, f_integrated, test_func_vals, d1test_func_vals, d2test_func_vals,
-                                        d1test_func_vals_bd)
+                                        d1test_func_vals_bd, weight_function)
         loss = b_weight * loss_b + v_weight * loss_v
         loss.backward()
 
@@ -130,7 +138,7 @@ if __name__ == "__main__":
 
         del loss
 
-    print(f"Training completed in {np.around(time.time()-start_time, 3)} seconds.")
+    print(f"Training completed in {np.around(time.time() - start_time, 3)} seconds.")
 
     # Plot the results
     print("Plotting ... ")
@@ -151,7 +159,7 @@ if __name__ == "__main__":
 
     # Plot predicted vs actual values
     Plots.plot_prediction(cfg, plot_grid, predictions, grid_shape=plot_res,
-                          plot_info_box = cfg['plots']['plot_info_box'])
+                          plot_info_box=cfg['plots']['plot_info_box'])
 
     # Plot loss over time
     Plots.plot_loss(model.loss_tracker)

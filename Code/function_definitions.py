@@ -9,20 +9,42 @@ Make sure the functions are defined for the dimension of the grid you are trying
 Currently only 1D and 2D grids are supported.
 """
 
+# A dictionary of some examples that we consider, in order to quickly access different equations.
+Examples = {
+    'Tanh': {'u': lambda x: 1 * (0.1 * np.sin(4 * np.pi * x) + np.tanh(5 * x)),
+             'f': lambda x: - (0.1 * (4 * np.pi ** 2) * np.sin(4 * np.pi * x)
+                               + (2 * 5 ** 2) * np.tanh(5 * x) / np.cosh(5 * x) ** 2)},
+
+    'SinSin2D': {'u': lambda x: np.sin(np.pi * x[0]) * np.sin(np.pi * x[1]),
+                 'f': lambda x: -2 * np.pi ** 2 * np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])},
+
+    'DoubleGauss1D': {'u': lambda x: 3 * x ** 2 * np.exp(-x ** 2),
+                      'f': lambda x, k, f: 6 * np.exp(-x ** 2) * (2 * x ** 4 - 5 * x ** 2 + 1) + k * f(x)},
+
+    'CubedRoot': {'u': lambda x: np.sign(x) * np.abs(x) ** (1. / 3),
+                  'f': lambda x: 1},
+
+    'Burger2D': {'u': lambda x: 1.0 / (1 + x[0] ** 2),
+                 'f': lambda x: 0}
+}
+
 
 # Exact solution
 @adapt_input
-def u(x: Any) -> float:
-    # Define the 1D case
-    if np.shape(x) <= (1,):
-        r1, omega, amp = 5, 4 * np.pi, 1
-        return amp * (0.1 * np.sin(omega * x) + np.tanh(r1 * x))
-        #return np.sign(x)*np.abs(x)**(1./3)
+def u(x: Any, *, example: str = None) -> float:
 
-    # Define the 2D case
+    example = 'CubedRoot'
+    # Choose from the given examples
+    if example is not None:
+        return Examples[example]['u'](x)
+
+    # Define an explicit 1D case
+    if np.shape(x) <= (1,):
+        return x
+
+    # Define an explicit 2D case
     elif len(x) == 2:
-        return np.sin(np.pi * x[0]) * np.sin(np.pi * x[1])
-        #return 1.0/(1+x[0]**2)
+        return x[0] + x[1]
 
     else:
         raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
@@ -30,18 +52,19 @@ def u(x: Any) -> float:
 
 # External forcing
 @adapt_input
-def f(x: Any) -> float:
-    # Define the 1D case
-    if len(x) == 1:
-        r1, omega, amp = 5, 4 * np.pi, 1
-        return -amp * (0.1 * (omega ** 2) * np.sin(omega * x)
-                       + (2 * r1 ** 2) * np.tanh(r1 * x) / np.cosh(r1 * x) ** 2)
-        #return 2.0*np.exp(-1.0*(x**2))*(2.0*(x**4)-5.0*(x**2)+1) + 5.0*u(x)
-        # return 1.0
-    # Define the 2D case
-    elif len(x) == 2:
-        return -2*np.pi**2*u(x)
+def f(x: Any, *, example: str = None) -> float:
+    example = 'CubedRoot'
+    # Choose from the given examples
+    if example is not None:
+        return Examples[example]['f'](x)
 
+    # Define an explicit 1D case
+    if np.shape(x) <= (1,):
+        return x
+
+    # Define an explicit 1D case
+    elif len(x) == 2:
+        return x[0] + x[1]
 
     else:
         raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")

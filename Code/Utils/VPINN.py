@@ -140,7 +140,8 @@ class VPINN(nn.Module):
                          test_func_vals: DataSet,
                          d1test_func_vals: DataSet = None,
                          d2test_func_vals: DataSet = None,
-                         d1test_func_vals_bd: DataSet = None):
+                         d1test_func_vals_bd: DataSet = None,
+                         weight_function=lambda x: 1):
         """ Calculates the variational loss on the interior.
 
         :param grid:
@@ -149,6 +150,7 @@ class VPINN(nn.Module):
         :param d1test_func_vals:
         :param d2test_func_vals:
         :param d1test_func_vals_bd:
+        :param weight_function: 
         :return:
         """
         if self._eq_type == 'Burger':
@@ -169,8 +171,11 @@ class VPINN(nn.Module):
                              f_integrated,
                              test_func_vals,
                              d1test_func_vals,
+                             d2test_func_vals,
+                             d1test_func_vals_bd,
                              self._var_form,
-                             self._pde_constants)
+                             self._pde_constants,
+                             weight_function)
 
         elif self._eq_type == 'Poisson':
             return Poisson(self.forward,
@@ -182,7 +187,8 @@ class VPINN(nn.Module):
                            d1test_func_vals,
                            d2test_func_vals,
                            d1test_func_vals_bd,
-                           self._var_form)
+                           self._var_form,
+                           weight_function)
 
         elif self._eq_type == 'PorousMedium':
             return PorousMedium(self.forward,
@@ -202,7 +208,8 @@ class VPINN(nn.Module):
                           grid,
                           f_integrated,
                           d1test_func_vals,
-                          self._var_form)
+                          self._var_form,
+                          weight_function)
 
         else:
             raise ValueError(f'Unrecognised equation type {self._eq_type}!')

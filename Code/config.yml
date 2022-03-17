@@ -4,7 +4,7 @@ seed: 42
 
 # Domain settings ......................................................................................................
 space:
-  dimension: 2
+  dimension: 1
 
   # The domain boundary
   boundary:
@@ -18,22 +18,26 @@ space:
 
 # PDE parameters .......................................................................................................
 PDE:
-  type: Poisson
+  type: PorousMedium
   PorousMedium:
     m: 2
   Helmholtz:
-    k: 5
+    k: -2.5
   Burger:
     nu: 0
 
 # The variational form to use; can be 0, 1, or 2
 variational_form: 1
+
 # Test function settings ...............................................................................................
 Test functions:
+  # Can be Legendre, Chebyshev, or Sine
   type: Legendre
   N_test_functions:
-    x: 20
+    x: 80
     y: 20
+  # Whether to weight the test functions
+  weighting: False
 
 # Neural net architecture ..............................................................................................
 architecture:
@@ -41,7 +45,7 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ....................................................................................................
-N_iterations: 2000
+N_iterations: 8000
 learning_rate: 0.001
 boundary_loss_weight: 2
 variational_loss_weight: 1
@@ -58,7 +62,7 @@ plots:
     text.usetex: True
     mathtext.fontset: 'stix'
     font.family: 'serif'
-    font.size: 24
+    font.size: 35
     figure.figsize: [14, 12]
     lines.linewidth: 6
     figure.autolayout: True

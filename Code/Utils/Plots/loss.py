@@ -7,10 +7,10 @@ from .tools import output_dir
 
 def plot_loss(loss_tracker: dict, *, show: bool = False):
     # Plot the boundary loss
-    plt.plot(loss_tracker['iter'], loss_tracker['loss_b'], label=r'boundary loss', color='darkred')
+    plt.plot(loss_tracker['iter'], loss_tracker['loss_b'], label=r'boundary loss', color='darkorange')
 
     # Plot the variational loss
-    plt.plot(loss_tracker['iter'], loss_tracker['loss_v'], label=r'variational loss', color='navy')
+    plt.plot(loss_tracker['iter'], loss_tracker['loss_v'], label=r'variational loss', color='darkslategray')
 
     # Add the grid
     plt.grid()

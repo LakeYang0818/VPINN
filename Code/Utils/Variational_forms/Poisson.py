@@ -16,7 +16,8 @@ def Poisson(u,
             d1test_func_vals,
             d2test_func_vals,
             d1test_func_vals_bd,
-            var_form):
+            var_form,
+            weight_function = lambda x: 1):
     """Calculates the variational loss for the Poisson equation.
 
     :param u: the model itself
@@ -29,6 +30,7 @@ def Poisson(u,
     :param d2test_func_vals: their second derivatives
     :param d1test_func_vals_bd: the test functions' first derivatives evaluated on the grid boundary
     :param var_form: the variational form to use
+    :param weight_function: the weighting function for the contributions of the individual test functions
     :return: the variational loss
     """
 
@@ -41,7 +43,8 @@ def Poisson(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(laplace, test_func_vals.data[i], domain_volume=grid.volume) - f_integrated.data[i])#*2**(-1.0*i)
+                integrate(laplace, test_func_vals.data[i], domain_volume=grid.volume) - f_integrated.data[i]
+            ) * weight_function(test_func_vals.coords[i])
 
     elif var_form == 1:
 
@@ -49,7 +52,8 @@ def Poisson(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume) + f_integrated.data[i])*2**(-1.0*i)
+                integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume) + f_integrated.data[i]
+            ) * weight_function(test_func_vals.coords[i])
 
     elif var_form == 2:
 
@@ -61,6 +65,7 @@ def Poisson(u,
                 integrate(u_int, torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True), domain_volume=grid.volume)
                 - integrate(u_bd, torch.sum(torch.mul(d1test_func_vals_bd.data[i], grid.normals), dim=1, keepdim=True),
                             domain_volume=grid.volume)
-                - f_integrated.data[i])#*2**(-1.0*i)
+                - f_integrated.data[i]
+            ) * weight_function(test_func_vals.coords[i])
 
     return loss_v / f_integrated.size
