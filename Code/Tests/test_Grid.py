@@ -94,6 +94,14 @@ def test_Grid_construction():
     assert grid2.volume == 20
     assert grid2.boundary_volume == 24
     assert len(grid2.normals == len(grid2.boundary))
+    assert len(grid2.lower_boundary == len(grid2.x))
+    assert len(grid2.upper_boundary == len(grid2.x))
+    assert len(grid2.right_boundary == len(grid2.y))
+    assert len(grid2.left_boundary == len(grid2.y))
+    assert (grid2.lower_boundary
+            == torch.stack([grid2.x.flatten(), grid2.y[0]*torch.ones_like(grid2.x).flatten()], dim=1)).all()
+    assert (grid2.right_boundary
+            == torch.stack([grid2.x[-1]*torch.ones_like(grid2.y).flatten(), grid2.y.flatten()], dim=1)).all()
 
 
 # Test grid rescaling to a new domain
