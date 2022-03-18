@@ -27,7 +27,7 @@ Examples = {
     'Burger2D': {'u': lambda x: 1.0 / (1 + x[0] ** 2),
                  'f': lambda x: 0},
 
-    'PorousMedium': {'u': lambda x, t: max(t**(-1/3)*(1-1/4*x**2*t**(-2/3)), 0),
+    'PorousMedium': {'u': lambda x, t: max(t**(-1/3)*(1-1.0/12*x**2*t**(-2/3)), 0),
                      'f': lambda x: 0}
 }
 
@@ -36,10 +36,10 @@ Examples = {
 @adapt_input
 def u(x: Any, *, example: str = None) -> float:
 
-    example = 'PorousMedium'
+    example = 'CubedRoot'
     # Choose from the given examples
     if example is not None:
-        return Examples[example]['u'](x[0], x[1])
+        return Examples[example]['u'](x)
 
     # Define an explicit 1D case
     if np.shape(x) <= (1,):
@@ -56,7 +56,7 @@ def u(x: Any, *, example: str = None) -> float:
 # External forcing
 @adapt_input
 def f(x: Any, *, example: str = None) -> float:
-    example = 'PorousMedium'
+    example = 'CubedRoot'
     # Choose from the given examples
     if example is not None:
         return Examples[example]['f'](x)

@@ -14,8 +14,9 @@ from ..Datatypes import Grid
 """Plots the model prediction and compares it to the exact solution, if given"""
 
 
-def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = False,
+def plot_prediction(cfg, grid: Grid, y_pred, loss_tracker, *, grid_shape: tuple, show: bool = False,
                     plot_info_box: bool = True):
+
     # For the Burger's equation, plot four time snaps
     if cfg['PDE']['type'] in ['Burger', 'PorousMedium']:
         fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
@@ -31,9 +32,9 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = 
             if i > 1:
                 axs[i].set_xlabel(r'$x$')
             if i == 0 or i == 2:
-                axs[i].set_ylabel(r'$y$', rotation=0)
+                axs[i].set_ylabel(r'$t$', rotation=0)
                 axs[i].yaxis.labelpad = 10
-            axs[i].text(0.05, 0.9, fr'$t={np.around(grid.y[-1].numpy()[0] * (t + 1) / grid_shape[-1], 3)}$',
+            axs[i].text(0.05, 0.8, fr'$t={np.around(grid.y[-1].numpy()[0] * (t + 1) / grid_shape[-1], 3)}$',
                         transform=axs[i].transAxes, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         if show:
             plt.show()
@@ -90,7 +91,7 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = 
     elif grid.dim == 2:
         if cfg['PDE']['type'] != 'Burger':
             plot_titles = ['Exact solution', 'VPINN prediction', 'Pointwise error', 'Forcing']
-            fig, axs = plt.subplots(2, 2, sharex=True, sharey=True)
+            fig, axs = plt.subplots(2, 2)
             axs = np.resize(axs, (1, 4))[0]
 
             # Generate the datasets
@@ -121,17 +122,32 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = 
                     axs[i].yaxis.labelpad = 10
 
             # Write the text box
-            axs[3].axis('off')
-            try:
-                info_str = info_from_cfg(cfg)
-            except:
-                info_str = "(Error obtaining info string; check latex settings)"
+            if plot_info_box:
+                axs[3].axis('off')
+                try:
+                    info_str = info_from_cfg(cfg)
+                except:
+                    info_str = "(Error obtaining info string; check latex settings)"
 
-            l_inf_err = torch.round(1000 * torch.abs(torch.max(err))).numpy() / 1000
-            info_str += '\n' + fr"$L^\infty$ error: {l_inf_err}"
+                l_inf_err = torch.round(1000 * torch.abs(torch.max(err))).numpy() / 1000
+                info_str += '\n' + fr"$L^\infty$ error: {l_inf_err}"
 
-            axs[3].text(0.0, 1.0, info_str, transform=axs[3].transAxes,
-                        verticalalignment='top')
+                axs[3].text(0.0, 1.0, info_str, transform=axs[3].transAxes,
+                            verticalalignment='top')
+
+            # Plot the loss
+            else:
+                axs[3].plot(loss_tracker['iter'], loss_tracker['loss_b'], label=r'boundary loss', color='darkorange')
+
+                # Plot the variational loss
+                axs[3].plot(loss_tracker['iter'], loss_tracker['loss_v'], label=r'variational loss', color='darkslategray')
+
+                # Add the grid, title, and labels
+                axs[3].grid()
+                axs[3].legend(shadow=True, loc='best', ncol=1)
+                axs[3].set_xlabel(r'Iteration')
+                axs[3].set_title(r'Loss')
+                axs[3].set_yscale('log')
 
         else:
             fig, axs = plt.subplots(1, 2)
@@ -150,18 +166,38 @@ def plot_prediction(cfg, grid: Grid, y_pred, *, grid_shape: tuple, show: bool = 
             cax = divider.append_axes('right', size='5%', pad=0.1)
             fig.colorbar(img, cax=cax, orientation='vertical')
             axs[0].set_xlabel(r'$x$')
-            axs[0].set_ylabel(r'$y$', rotation=0)
+            axs[0].set_ylabel(r'$t$', rotation=0)
             axs[0].yaxis.labelpad = 10
+            axs[0].set_title("VPINN prediction")
 
             # Write the text box
-            axs[1].axis('off')
-            try:
-                info_str = info_from_cfg(cfg)
-            except:
-                info_str = "(Error obtaining info string; check latex settings)"
+            if plot_info_box:
+                axs[1].axis('off')
+                try:
+                    info_str = info_from_cfg(cfg)
+                except:
+                    info_str = "(Error obtaining info string; check latex settings)"
 
-            axs[1].text(0.0, 1.0, info_str, transform=axs[1].transAxes,
-                        verticalalignment='top')
+                l_inf_err = torch.round(1000 * torch.abs(torch.max(err))).numpy() / 1000
+                info_str += '\n' + fr"$L^\infty$ error: {l_inf_err}"
+
+                axs[1].text(0.0, 1.0, info_str, transform=axs[3].transAxes,
+                            verticalalignment='top')
+
+            # Plot the loss
+            else:
+                axs[1].plot(loss_tracker['iter'], loss_tracker['loss_b'], label=r'boundary loss', color='darkorange')
+
+                # Plot the variational loss
+                axs[1].plot(loss_tracker['iter'], loss_tracker['loss_v'], label=r'variational loss',
+                            color='darkslategray')
+
+                # Add the grid, title, and labels
+                axs[1].grid()
+                axs[1].legend(shadow=True, loc='best', ncol=1)
+                axs[1].set_xlabel(r'Iteration')
+                axs[1].set_title(r'Loss')
+                axs[1].set_yscale('log')
 
         # Save the file
         if show:

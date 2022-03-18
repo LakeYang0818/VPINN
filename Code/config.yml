@@ -4,21 +4,21 @@ seed: 42
 
 # Domain settings ......................................................................................................
 space:
-  dimension: 2
+  dimension: 1
 
   # The domain boundary
   boundary:
-    x: [-3, 3]
-    y: [0.1, 2]
+    x: [-1, 1]
+    y: [0, 2]
 
   # The grid size. Should be at least 3.
   grid_size:
-    x: 20
-    y: 20
+    x: 200
+    y: 80
 
 # PDE parameters .......................................................................................................
 PDE:
-  type: PorousMedium
+  type: Weak1D
   PorousMedium:
     m: 2
   Helmholtz:
@@ -31,13 +31,15 @@ variational_form: 1
 
 # Test function settings ...............................................................................................
 Test functions:
-  # Can be Legendre, Chebyshev, or Sine
-  type: Legendre
   N_test_functions:
-    x: 10
-    y: 10
+    x: 40
+    y: 40
+
+  # Type: can be Legendre, Chebyshev, or Sine
+  type: Legendre
+
   # Whether to weight the test functions
-  weighting: False
+  weighting: True
 
 # Neural net architecture ..............................................................................................
 architecture:
@@ -45,7 +47,7 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ....................................................................................................
-N_iterations: 1000
+N_iterations: 10
 learning_rate: 0.001
 boundary_loss_weight: 1
 variational_loss_weight: 1
@@ -57,12 +59,14 @@ plots:
     y: 120
   plot_animation: False
   plot_info_box: False
+  write_loss_data: True
+
   # these are passed to matplotlib.rcParams
   rcParams:
-    text.usetex: True
+    text.usetex: False
     mathtext.fontset: 'stix'
     font.family: 'serif'
-    font.size: 24
-    figure.figsize: [14, 12]
+    font.size: 12
+    figure.figsize: [8, 8]
     lines.linewidth: 6
     figure.autolayout: True

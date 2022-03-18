@@ -233,7 +233,7 @@ def testfunc_grid_evaluation(grid: Grid,
                                         as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad)
 
             # Get the test function values on the y-axis
-            vals_y_0: DataSet = DataSet(coords=indices.x,
+            vals_y_0: DataSet = DataSet(coords=indices.y,
                                         data=[dtest_function(domain_y, idx[0], d=0, which=which) for idx in indices.y],
                                         as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad)
 

@@ -100,10 +100,10 @@ if __name__ == "__main__":
     grid.interior.requires_grad = True
 
     # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.
-    # For the Burger's and Porous medium equation, training data is the initial data given
+    # For the Burgers equation, training data is the initial data given
     # on the lower temporal boundary.
     print("Generating training data ...")
-    if eq_type in ['Burger']:
+    if eq_type in ['Burger', 'PorousMedium']:
         training_data: DataSet = DataSet(coords=grid.lower_boundary, data=u(grid.lower_boundary), as_tensor=True,
                                          requires_grad=False)
     else:
@@ -158,11 +158,11 @@ if __name__ == "__main__":
         Plots.animate(plot_grid, predictions)
 
     # Plot predicted vs actual values
-    Plots.plot_prediction(cfg, plot_grid, predictions, grid_shape=plot_res,
+    Plots.plot_prediction(cfg, plot_grid, predictions, model.loss_tracker, grid_shape=plot_res,
                           plot_info_box=cfg['plots']['plot_info_box'])
 
     # Plot loss over time
-    Plots.plot_loss(model.loss_tracker)
+    Plots.plot_loss(model.loss_tracker, write_data=cfg['plots']['write_loss_data'])
 
     # Plot test functions
     # Plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1, which=test_func_type)
