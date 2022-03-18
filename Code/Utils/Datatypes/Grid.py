@@ -105,6 +105,7 @@ class Grid:
                 self._interior = torch.reshape(self._x[1:-1], (self._n_x - 2, 1))
             self._size = self._n_x
         else:
+
             # Collect data and interior points
             data, interior = [], []
             for j in range(self._n_y):
@@ -128,23 +129,31 @@ class Grid:
                 else:
                     lower.append(torch.reshape(torch.stack([self._x[i], self._y[0]]), (1, 2)))
                     upper.append(torch.reshape(torch.stack([self._x[len(self._x) - i - 1], self._y[-1]]), (1, 2)))
-            for j in range(1, self._n_y - 1):
+            for j in range(self._n_y):
                 if not as_tensor:
                     right.append([self._x[-1], self._y[j]])
                     left.append([self._x[0], self._y[len(self._y) - j - 1]])
                 else:
                     right.append(torch.reshape(torch.stack([self._x[-1], self._y[j]]), (1, 2)))
                     left.append(torch.reshape(torch.stack([self._x[0], self._y[len(self._y) - j - 1]]), (1, 2)))
-            boundary = lower + right + upper + left
+            boundary = lower[:-1] + right[:-1] + upper[:-1] + left[:-1]
 
             if not as_tensor:
                 self._data = np.resize(np.array(data), (self._n_x * self._n_y, 2))
                 self._boundary = np.resize(np.array(boundary), (2 * (self._n_x + self._n_y - 2), 2))
+                self._lower = np.resize(np.array(lower), (self._n_x, 2))
+                self._right = np.resize(np.array(right), (self._n_y, 2))
+                self._upper = np.resize(np.array(upper), (self._n_x, 2))
+                self._left = np.resize(np.array(left), (self._n_y, 2))
                 self._interior = np.resize(np.array(interior),
                                            ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
             else:
                 self._data = torch.reshape(torch.stack(data), (self._n_x * self._n_y, 2))
                 self._boundary = torch.reshape(torch.stack(boundary), (2 * (self._n_x + self._n_y - 2), 2))
+                self._lower = torch.reshape(torch.stack(lower), (self._n_x, 2))
+                self._right = torch.reshape(torch.stack(right), (self._n_y, 2))
+                self._upper = torch.reshape(torch.stack(upper), (self._n_x, 2))
+                self._left = torch.reshape(torch.stack(left), (self._n_y, 2))
                 self._interior = torch.reshape(torch.stack(interior),
                                                ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
 
@@ -211,6 +220,35 @@ class Grid:
     @property
     def boundary(self):
         return self._boundary
+
+    @property
+    def lower_boundary(self):
+        if self.dim == 1:
+            raise ValueError("1-dimensional grid has no attribute 'lower_boundary'!")
+        else:
+            return self._lower
+
+    @property
+    def upper_boundary(self):
+        if self.dim == 1:
+            raise ValueError("1-dimensional grid has no attribute 'upper_boundary'!")
+        else:
+            return self._upper
+
+    @property
+    def right_boundary(self):
+        if self.dim == 1:
+            raise ValueError("1-dimensional grid has no attribute 'right_boundary'!")
+        else:
+            return self._right
+
+    @property
+    def left_boundary(self):
+        if self.dim == 1:
+            raise ValueError("1-dimensional grid has no attribute 'left_boundary'!")
+        else:
+            return self._left
+
 
     @property
     def boundary_volume(self):

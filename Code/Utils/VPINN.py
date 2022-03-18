@@ -40,11 +40,6 @@ class VPINN(nn.Module):
             ValueError: if the variational form is unrecognized
         """
 
-        if eq_type not in self.EQUATION_TYPES:
-            raise ValueError(f"Unrecognized equation type "
-                             f"'{eq_type}'! "
-                             f"Choose from: {', '.join(self.EQUATION_TYPES)}")
-
         if var_form not in self.VAR_FORMS:
             raise ValueError(f"Unrecognized variational_form  "
                              f"'{var_form}'! "
@@ -119,20 +114,19 @@ class VPINN(nn.Module):
 
     # ... Loss functions ...............................................................................................
 
-    def boundary_loss(self, training_data: DataSet):
+    def boundary_loss(self, training_data: DataSet) -> torch.Tensor:
+
         """Calculates the loss on the domain boundary.
 
-        :param training_data:
-        :return:
+        :param training_data: the model training data
+        :return: the boundary loss
         """
 
         # Conduct a forward pass on the training data
         u = self.forward(training_data.coords)
 
         # Calculate the pointwise error
-        loss_b = torch.nn.functional.mse_loss(u, training_data.data)
-
-        return loss_b
+        return torch.nn.functional.mse_loss(u, training_data.data)
 
     def variational_loss(self,
                          grid: Grid,
@@ -141,19 +135,22 @@ class VPINN(nn.Module):
                          d1test_func_vals: DataSet = None,
                          d2test_func_vals: DataSet = None,
                          d1test_func_vals_bd: DataSet = None,
-                         weight_function=lambda x: 1):
-        """ Calculates the variational loss on the interior.
+                         weight_function=lambda x: 1) -> torch.Tensor:
 
-        :param grid:
-        :param f_integrated:
-        :param test_func_vals:
-        :param d1test_func_vals:
-        :param d2test_func_vals:
-        :param d1test_func_vals_bd:
-        :param weight_function: 
-        :return:
+        """ Calculates the variational loss on the grid interior.
+
+        :param grid: the grid
+        :param f_integrated: the external function integrated against all test functions
+        :param test_func_vals: the test function values on the grid interior
+        :param d1test_func_vals: the values of the test function derivatives on the grid interior
+        :param d2test_func_vals: the values of the second derivatives of the test functions on the grid interior
+        :param d1test_func_vals_bd: the values of the first derivatives of the test functions on the boundary
+        :param weight_function: the function used to weight the test function contributions in the residual loss
+        :return: the variational loss
         """
+
         if self._eq_type == 'Burger':
+
             return Burger(self.forward,
                           self.grad,
                           grid,
@@ -164,6 +161,7 @@ class VPINN(nn.Module):
                           self._pde_constants)
 
         elif self._eq_type == 'Helmholtz':
+
             return Helmholtz(self.forward,
                              self.grad,
                              self.gradgrad,
@@ -178,6 +176,7 @@ class VPINN(nn.Module):
                              weight_function)
 
         elif self._eq_type == 'Poisson':
+
             return Poisson(self.forward,
                            self.grad,
                            self.gradgrad,
@@ -191,9 +190,9 @@ class VPINN(nn.Module):
                            weight_function)
 
         elif self._eq_type == 'PorousMedium':
+
             return PorousMedium(self.forward,
                                 self.grad,
-                                self.gradgrad,
                                 grid,
                                 f_integrated,
                                 test_func_vals,
@@ -204,6 +203,7 @@ class VPINN(nn.Module):
                                 self._pde_constants)
 
         elif self._eq_type == 'Weak1D':
+
             return Weak1D(self.forward,
                           grid,
                           f_integrated,
@@ -212,4 +212,5 @@ class VPINN(nn.Module):
                           weight_function)
 
         else:
-            raise ValueError(f'Unrecognised equation type {self._eq_type}!')
+            raise ValueError(f"Unrecognized equation type '{self._eq_type}'! "
+                             f"Choose from: {', '.join(self.EQUATION_TYPES)}")

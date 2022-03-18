@@ -144,6 +144,3 @@ def integrate(func_1: Any, func_2: Any = None, *, domain_volume: float = 1, as_t
 
 
 
-
-
-

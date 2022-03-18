@@ -75,6 +75,7 @@ if __name__ == "__main__":
                                                             which=test_func_type) if var_form >= 2 else None
 
     # The weight function for the test functions. Takes an index or a tuple of indices
+    # TO DO: this should be done more carefully
     if cfg['Test functions']['weighting']:
         weight_function = lambda x: 2 ** (-x[0]) * 2 ** (-x[1]) if dim == 2 else 2 ** (-x)
     else:
@@ -93,7 +94,7 @@ if __name__ == "__main__":
     model: VPINN = VPINN(architecture, eq_type, var_form,
                          pde_constants=PDE_constants,
                          learning_rate=cfg['learning_rate'],
-                         activation_func=torch.sin).to(device)
+                         activation_func=torch.relu).to(device)
 
     # Turn on tracking for the grid interior, on which the variational loss is calculated
     grid.interior.requires_grad = True
@@ -102,9 +103,8 @@ if __name__ == "__main__":
     # For the Burger's and Porous medium equation, training data is the initial data given
     # on the lower temporal boundary.
     print("Generating training data ...")
-    if eq_type in ['Burger', 'PorousMedium']:
-        lower_boundary = torch.stack([torch.flatten(grid.x), grid.y[0] * torch.ones(len(grid.x))], dim=1)
-        training_data: DataSet = DataSet(coords=lower_boundary, data=u(lower_boundary), as_tensor=True,
+    if eq_type in ['Burger']:
+        training_data: DataSet = DataSet(coords=grid.lower_boundary, data=u(grid.lower_boundary), as_tensor=True,
                                          requires_grad=False)
     else:
         training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True,

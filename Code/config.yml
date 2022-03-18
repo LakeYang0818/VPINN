@@ -4,12 +4,12 @@ seed: 42
 
 # Domain settings ......................................................................................................
 space:
-  dimension: 1
+  dimension: 2
 
   # The domain boundary
   boundary:
-    x: [-1, 1]
-    y: [-1, 1]
+    x: [-3, 3]
+    y: [0.1, 2]
 
   # The grid size. Should be at least 3.
   grid_size:
@@ -34,8 +34,8 @@ Test functions:
   # Can be Legendre, Chebyshev, or Sine
   type: Legendre
   N_test_functions:
-    x: 80
-    y: 20
+    x: 10
+    y: 10
   # Whether to weight the test functions
   weighting: False
 
@@ -45,9 +45,9 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ....................................................................................................
-N_iterations: 8000
+N_iterations: 1000
 learning_rate: 0.001
-boundary_loss_weight: 2
+boundary_loss_weight: 1
 variational_loss_weight: 1
 
 # Plot settings ........................................................................................................
@@ -62,7 +62,7 @@ plots:
     text.usetex: True
     mathtext.fontset: 'stix'
     font.family: 'serif'
-    font.size: 35
+    font.size: 24
     figure.figsize: [14, 12]
     lines.linewidth: 6
     figure.autolayout: True

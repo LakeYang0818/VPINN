@@ -26,6 +26,7 @@ def info_from_cfg(cfg):
     test_func_info = fr"Number of test functions: $K_x=$ {cfg['Test functions']['N_test_functions']['x']}"
     if dim == 2:
         test_func_info += fr", $K_y=$ {cfg['Test functions']['N_test_functions']['y']}"
+    test_func_info += '\n' + fr"Test function type: {cfg['Test functions']['type']}"
     iterations_info = fr"{cfg['N_iterations']} iterations, $\tau_b=${cfg['boundary_loss_weight']}" + \
                       fr", $\tau_v=${cfg['variational_loss_weight']}"
 

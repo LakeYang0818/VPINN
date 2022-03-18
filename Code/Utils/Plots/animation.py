@@ -11,8 +11,10 @@ from ..Datatypes import Grid
 
 
 def animate(grid: Grid, y_pred, *, n_frames: int=200, fps: int=30, interval: int=200, show: bool = False):
+
     fig = plt.figure()
-    ax = plt.axes(xlim=(grid.x[0], grid.x[-1]), ylim=(grid.y[0], grid.y[-1]))
+    y_pred = torch.reshape(y_pred, (len(grid.x), len(grid.y)))
+    ax = plt.axes(xlim=(grid.x[0], grid.x[-1]), ylim=(0.9*torch.min(y_pred), 1.1*torch.max(y_pred)))
     ax.set_xlabel(r'$x$')
     ax.set_ylabel(r'$u(x)$')
 
