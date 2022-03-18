@@ -186,8 +186,7 @@ def test_evaluation_on_grid():
                     assert vals.data.shape == torch.Size([10, len(value(grid)), 1])
 
                 # Test the function values
-                grid_rescaled = rescale_grid(grid, new_domain=[-1, 1],
-                                             as_tensor=grid.is_tensor, requires_grad=grid.requires_grad)
+                grid_rescaled = rescale_grid(grid, new_domain=[-1, 1])
                 for i in range(len(vals.data)):
                     assert (vals.data[i] == dtest_function(value(grid_rescaled), i + 1, d=order,
                                                            which='Legendre')).all()
@@ -217,8 +216,7 @@ def test_evaluation_on_grid():
                         assert vals.data.shape == torch.Size([16, len(value(grid)), 2])
 
                 # Test the function values
-                grid_rescaled = rescale_grid(grid, new_domain=[[-1, 1], [-1, 1]],
-                                             as_tensor=grid.is_tensor, requires_grad=grid.requires_grad)
+                grid_rescaled = rescale_grid(grid, new_domain=[[-1, 1], [-1, 1]])
 
                 if order > 0:
                     for k in range(len(vals.data)):
