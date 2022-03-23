@@ -1,6 +1,6 @@
 import torch
 
-from Code.Utils.utils import integrate
+from Utils.utils import integrate
 
 """Variational loss for the one-dimensional weak PDE equation"""
 

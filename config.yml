@@ -13,7 +13,7 @@ space:
 
   # The grid size. Should be at least 3.
   grid_size:
-    x: 30
+    x: 10
     y: 30
 
 # PDE parameters .......................................................................................................
@@ -27,13 +27,13 @@ PDE:
     nu: 0
 
 # The variational form to use; can be 0, 1, or 2
-variational_form: 1
+variational_form: 2
 
 # Test function settings ...............................................................................................
 Test functions:
   N_test_functions:
-    x: 20
-    y: 20
+    x: 10
+    y: 10
 
   # Type: can be Legendre, Chebyshev, or Sine
   type: Legendre
@@ -47,7 +47,7 @@ architecture:
   nodes_per_layer: 20
 
 # Training settings ....................................................................................................
-N_iterations: 2000
+N_iterations: 1000
 learning_rate: 0.001
 boundary_loss_weight: 1
 variational_loss_weight: 1
