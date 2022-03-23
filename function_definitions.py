@@ -28,7 +28,12 @@ Examples = {
                  'f': lambda x: 0},
 
     'PorousMedium': {'u': lambda x, t: max(t**(-1/3)*(1-1.0/12*x**2*t**(-2/3)), 0),
-                     'f': lambda x: 0}
+                     'f': lambda x: 0},
+
+    'Tanh2D' : {'u': lambda x: (0.1*np.sin(2*np.pi*x[0])+np.tanh(10*x[0]))*np.sin(2*np.pi*x[1]),
+                'f': lambda x: np.sin(2*np.pi*x[1])*(
+                        np.tanh(10*x[0])*(-200/(np.cosh(10*x[0])**2)-4*np.pi**2))
+                               -4*np.pi**2/5*np.sin(2*np.pi*x[0])}
 }
 
 
@@ -36,7 +41,7 @@ Examples = {
 @adapt_input
 def u(x: Any, *, example: str = None) -> float:
 
-    example = 'CubedRoot'
+    example = 'Tanh2D'
     # Choose from the given examples
     if example is not None:
         return Examples[example]['u'](x)
@@ -56,7 +61,7 @@ def u(x: Any, *, example: str = None) -> float:
 # External forcing
 @adapt_input
 def f(x: Any, *, example: str = None) -> float:
-    example = 'CubedRoot'
+    example = 'Tanh2D'
     # Choose from the given examples
     if example is not None:
         return Examples[example]['f'](x)
