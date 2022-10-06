@@ -1,0 +1,164 @@
+---
+.variables:
+  base_path:        &base_path    data
+
+  colors: &colors
+    yellow:         &yellow           '#F5DDA9'
+    darkblue:       &darkblue         '#2F7194'
+    red:            &red              '#ec7070'
+    skyblue:        &skyblue          '#97c3d0'
+    darkgreen:      &darkgreen        '#48675A'
+    lightbrown:     &lightbrown       '#C6BFA2'
+    orange:         &orange           '#EC9F7E'
+    lightgreen:     &lightgreen       '#AFD8BC'
+    grey:           &grey             '#3D4244'
+
+.default_style:
+  style:
+    text.usetex:        True
+    mathtext.fontset:   cm
+    font.family:        serif
+    font.size:          &fontsize 9
+    axes.titlesize:     *fontsize
+    axes.labelsize:     *fontsize
+    xtick.labelsize:    *fontsize
+    ytick.labelsize:    *fontsize
+    grid.linewidth:     0.5
+    savefig.bbox:       tight
+    axes.prop_cycle: !format
+      fstr: "cycler('color', ['{colors[lightgreen]:}', '{colors[red]:}', '{colors[darkgreen]:}'])"
+      colors: *colors
+    axes.grid:          True
+#    axes.spines.top:    False
+#    axes.spines.right:  False
+    legend.fontsize: 9
+  helpers:
+    save_figure:
+      dpi: 900
+  file_ext: png
+
+
+# ======================================================================================================================
+#  ╔╦╗╔═╗╔╦╗╔═╗╦  ╔═╗╔╦╗╔═╗╔═╗
+#   ║ ║╣ ║║║╠═╝║  ╠═╣ ║ ║╣ ╚═╗
+#   ╩ ╚═╝╩ ╩╩  ╩═╝╩ ╩ ╩ ╚═╝╚═╝
+# ======================================================================================================================
+# -- Overloads ---------------------------------------------------------------------------------------------------------
+# Overload some configs to insert model-specific settings
+.creator.universe:
+  based_on:
+    - .creator.universe
+    - .default_style
+
+  dag_options:
+    select_path_prefix: *base_path
+
+.creator.multiverse:
+  based_on:
+    - .creator.multiverse
+    - .default_style
+
+  select_and_combine:
+    base_path: *base_path
+
+# ======================================================================================================================
+#  ╔═╗╦  ╔═╗╔╦╗╔═╗
+#  ╠═╝║  ║ ║ ║ ╚═╗
+#  ╩  ╩═╝╚═╝ ╩ ╚═╝
+# ======================================================================================================================
+
+# -- Plot of the training loss -----------------------------------------------------------------------------------------
+loss:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
+  select:
+    data: VPINN/loss
+  x: time
+  hue: loss type
+  helpers:
+    set_labels:
+      x: iteration
+      y: Training loss
+    set_scales:
+      y: log
+
+# 2-dimensional grid
+grid2d:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.scatter
+  select:
+    grid: data/grid
+  transform:
+    - .isel: [!dag_prev , {idx: 0}]
+      kwargs:
+        drop: true
+      tag: x
+    - .isel: [!dag_tag grid, {idx: 1}]
+      kwargs:
+        drop: true
+      tag: y
+    - xr.Dataset:
+      - idx0: !dag_tag x
+        idx1: !dag_tag y
+    - print: [!dag_prev ]
+      tag: data
+  x: idx0
+  y: idx1
+
+# 3-dimensional grid
+grid3d:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.scatter3d
+  select:
+    grid: data/grid
+  transform:
+    - .isel: [!dag_prev , {idx: 0}]
+      kwargs:
+        drop: true
+    - .data: [!dag_prev ]
+    - .flatten: [!dag_prev ]
+      tag: x
+    - .isel: [!dag_tag grid, {idx: 1}]
+      kwargs:
+        drop: true
+    - .data: [!dag_prev ]
+    - .flatten: [!dag_prev ]
+      tag: y
+    - .isel: [ !dag_tag grid, { idx: 2 } ]
+      kwargs:
+        drop: true
+    - .data: [ !dag_prev ]
+    - .flatten: [ !dag_prev ]
+      tag: z
+    - xr.Dataset:
+      - idx0: !dag_tag x
+        idx1: !dag_tag y
+        idx2: !dag_tag z
+      tag: data
+  x: idx0
+  y: idx1
+  z: idx2
+  helpers:
+    set_labels:
+      x: x
+      y: y
+      z: z
+
+# Plot a function on a two-dimensional domain
+plot_function_2d:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.pcolormesh
+  select:
+    data: data/test_function_values
+  x: x
+  y: y
+  cmap:
+    continuous: true
+    from_values:
+      0: *darkblue
+      0.5: *red
+      1: *yellow

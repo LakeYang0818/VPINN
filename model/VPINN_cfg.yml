@@ -1,0 +1,59 @@
+---
+# Domain settings ......................................................................................................
+load_from_dir: ~
+
+space:
+  x:
+    extent: [0, 1]
+    size: 5
+  y:
+    extent: [0, 1]
+    size: 5
+#  z:
+#    extent: [3, 4]
+#    size: 4
+
+# PDE parameters .......................................................................................................
+PDE:
+  type: Burger
+  PorousMedium:
+    m: 2
+  Helmholtz:
+    k: -2.5
+  Burger:
+    nu: 0
+
+# The variational form to use; can be 0, 1, or 2
+variational_form: 2
+
+# Test function settings ...............................................................................................
+test_functions:
+  num_functions:
+    n_x:
+      size: 3
+    n_y:
+      size: 3
+#    n_z:
+#      size: 2
+
+  type: !param
+    default: Sine
+    dtype: str
+    is_any_of: [Legendre, Chebyshev, Sine]
+
+  # Whether to weight the test functions
+  weighting: True
+
+# Neural net architecture ..............................................................................................
+NeuralNet:
+  num_layers: 4
+  nodes_per_layer: 20
+  activation_func: sin
+
+# Training settings ....................................................................................................
+Training:
+  device: cpu
+  batch_size: 1
+  learning_rate: 0.001
+  boundary_loss_weight: 1
+  variational_loss_weight: 1

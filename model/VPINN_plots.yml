@@ -1,0 +1,56 @@
+# ======================================================================================================================
+#  ╔═╗╦  ╔═╗╔╦╗╔═╗
+#  ╠═╝║  ║ ║ ║ ╚═╗
+#  ╩  ╩═╝╚═╝ ╩ ╚═╝
+# ======================================================================================================================
+# Plot the evolution of the training loss
+loss:
+  based_on: loss
+
+# Plot f evaluated on the grid
+f_evaluated:
+  based_on: plot_function_2d
+  select:
+    data: data/f_evaluated
+
+# Plot the values of f integrated against the test functions
+f_integrated:
+  based_on: plot_function_2d
+  select:
+    data: data/f_integrated
+  x: n_x
+  y: n_y
+  helpers:
+    set_tick_locators:
+      x: &formatting
+        major:
+          name: MaxNLocator
+          integer: true
+      y:
+        <<: *formatting
+
+# Plot the test functions
+test_functions:
+  based_on: plot_function_2d
+  row: n_x
+  col: n_y
+
+# Plot the first derivative of the test functions
+d1_test_functions:
+  based_on: test_functions
+  select:
+    data: data/d1_test_function_values
+
+# Plot the second derivative of the test functions
+d2_test_functions:
+  based_on: test_functions
+  select:
+    data: data/d2_test_function_values
+
+# Plot the grid (2D)
+grid2d:
+  based_on: grid2d
+
+# Plot the grid (3D)
+grid3d:
+  based_on: grid3d

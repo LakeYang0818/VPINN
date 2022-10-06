@@ -1,8 +1,70 @@
 import numpy as np
-import torch
-from typing import Sequence, Union
-import warnings
+import xarray
 
+
+def construct_grid(space_dict: dict, *, lower: int = None, upper: int = None, dtype = None) -> xarray.DataArray:
+
+    """ Constructs a grid from a configuration dictionary, and returns it as a xarray.DataArray.
+
+    :param space_dict: the dictionary of space configurations
+    :param lower: (optional) the lower grid value to use if no extent is given
+    :param upper: (optional) the upper grid value to use if no extent is given. Defaults to the extent of the grid.
+    :param dtype: (optional) the grid value datatype to use
+    :return: the grid (an xarray.DataArray)
+
+    raises:
+        ValueError: for grid dimensions of size greater than 3 (currently not implemented)
+    """
+
+    coords, data_vars = {}, {}
+
+    # Create the coordinate dictionary
+    for key, entry in space_dict.items():
+        l, u = entry.pop('extent', (lower, upper))
+        u = entry['size'] if u is None else u
+        coords[key] = (key, np.linspace(l, u, entry['size'], dtype=dtype))
+
+    # Create the meshgrid. The order of the indices needs to be adapted to the output shape of np.meshgrid.
+    indices = list(coords.keys()) + ['idx']
+    if len(indices) == 2:
+        data = coords[indices[0]][1]
+
+    elif len(indices) == 3:
+
+        x, y = np.meshgrid(coords[indices[0]][1], coords[indices[1]][1])
+        indices[0], indices[1] = indices[1], indices[0]
+        data = np.stack([x, y], axis=-1)
+
+    elif len(indices) == 4:
+        x, y, z = np.meshgrid(coords[indices[0]][1], coords[indices[1]][1], coords[indices[2]][1])
+        indices[0], indices[1] = indices[1], indices[0]
+        data = np.stack([x, y, z], axis=-1)
+
+    else:
+        raise ValueError(f'Currently not implemented for grid dimensions > 4; got dimension {len(indices)-1}!')
+
+    # Update the DataArray coordinates
+    coords.update(dict(idx=('idx', np.arange(1, len(indices), 1))))
+
+    # Add grid dimension as an attribute
+    res = xarray.DataArray(coords=coords, data=data, dims=indices)
+    res.attrs['grid_dimension'] = len(indices) - 1
+
+    # Calculate grid density for integration
+    n_points, volume = np.prod(list(res.sizes.values()))/res.sizes['idx'], 1
+    for key, range in res.coords.items():
+        if key == 'idx':
+            continue
+        volume *= (range.isel({key: -1}) - range.isel({key: 0}))
+
+    res.attrs['grid_density'] = volume / n_points
+
+    return res
+
+
+from typing import Sequence, Union, Any
+import torch
+import warnings
 
 class Grid:
 
@@ -307,72 +369,72 @@ class Grid:
 
 # ... Grid constructor ................................................................................................
 
-def construct_grid(*, dim: int,
-                   boundary: Sequence,
-                   grid_size: Union[int, Sequence[int]],
-                   as_tensor: bool = True,
-                   dtype=torch.float,
-                   requires_grad: bool = False,
-                   requires_normals: bool = False) -> Grid:
-    """Constructs a grid of the given dimension.
-
-    :param dim: the dimension of the grid
-    :param boundary: the boundaries of the grid
-    :param grid_size: the number of grid points in each dimension
-    :param as_tensor: whether to return the grid points as tensors
-    :param dtype: the datatype of the grid points
-    :param requires_grad: whether the grid points require differentiability
-    :param requires_normals: whether the grid boundary normal values need to be calculated
-    :return: the grid
-    """
-
-    def _grid_1d(lower: float, upper: float, n_points: int) -> Sequence:
-
-        """Constructs a one-dimensional grid."""
-
-        step_size = (1.0 * upper - lower) / (1.0 * n_points - 1)
-
-        return [lower + _ * step_size for _ in range(n_points)]
-
-    if dim == 1:
-
-        return Grid(x=_grid_1d(boundary[0], boundary[1], grid_size),
-                    as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad, requires_normals=requires_normals)
-
-    elif dim == 2:
-        x: Sequence = _grid_1d(boundary[0][0], boundary[0][1], grid_size[0])
-        y: Sequence = _grid_1d(boundary[1][0], boundary[1][1], grid_size[1])
-
-        return Grid(x=x, y=y, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad,
-                    requires_normals=requires_normals)
-
-
-def rescale_grid(grid: Grid, *, new_domain) -> Grid:
-    """ Rescales a grid to a new domain.
-
-    :param grid: the grid to rescale
-    :param new_domain: the domain to which to scale the grid
-    :return: the rescaled grid
-
-    :raises ValueError: if a grid is being rescaled to a new domain whose dimension does not match the
-        grid dimension.
-    """
-
-
-    if grid.dim == 1:
-        if np.shape(new_domain) != (2,):
-            raise ValueError(f"Cannot rescale 1d grid to {len(np.shape(new_domain))}-dimensional domain!")
-
-        return Grid(x=(new_domain[1] - new_domain[0]) * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) + new_domain[0],
-                    as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))
-
-    elif grid.dim == 2:
-        if np.shape(new_domain) != (2, 2):
-            raise ValueError(f"Cannot rescale 2d grid to {len(np.shape(new_domain))}-dimensional domain!")
-
-        return Grid(
-            x=(new_domain[0][1] - new_domain[0][0]) * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) + new_domain[0][
-                0],
-            y=(new_domain[1][1] - new_domain[1][0]) * (grid.y - grid.y[0]) / (grid.y[-1] - grid.y[0]) + new_domain[1][
-                0],
-            as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))
+# def construct_grid(*, dim: int,
+#                    boundary: Sequence,
+#                    grid_size: Union[int, Sequence[int]],
+#                    as_tensor: bool = True,
+#                    dtype=torch.float,
+#                    requires_grad: bool = False,
+#                    requires_normals: bool = False) -> Grid:
+#     """Constructs a grid of the given dimension.
+#
+#     :param dim: the dimension of the grid
+#     :param boundary: the boundaries of the grid
+#     :param grid_size: the number of grid points in each dimension
+#     :param as_tensor: whether to return the grid points as tensors
+#     :param dtype: the datatype of the grid points
+#     :param requires_grad: whether the grid points require differentiability
+#     :param requires_normals: whether the grid boundary normal values need to be calculated
+#     :return: the grid
+#     """
+#
+#     def _grid_1d(lower: float, upper: float, n_points: int) -> Sequence:
+#
+#         """Constructs a one-dimensional grid."""
+#
+#         step_size = (1.0 * upper - lower) / (1.0 * n_points - 1)
+#
+#         return [lower + _ * step_size for _ in range(n_points)]
+#
+#     if dim == 1:
+#
+#         return Grid(x=_grid_1d(boundary[0], boundary[1], grid_size),
+#                     as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad, requires_normals=requires_normals)
+#
+#     elif dim == 2:
+#         x: Sequence = _grid_1d(boundary[0][0], boundary[0][1], grid_size[0])
+#         y: Sequence = _grid_1d(boundary[1][0], boundary[1][1], grid_size[1])
+#
+#         return Grid(x=x, y=y, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad,
+#                     requires_normals=requires_normals)
+#
+#
+# def rescale_grid(grid: Grid, *, new_domain) -> Grid:
+#     """ Rescales a grid to a new domain.
+#
+#     :param grid: the grid to rescale
+#     :param new_domain: the domain to which to scale the grid
+#     :return: the rescaled grid
+#
+#     :raises ValueError: if a grid is being rescaled to a new domain whose dimension does not match the
+#         grid dimension.
+#     """
+#
+#
+#     if grid.dim == 1:
+#         if np.shape(new_domain) != (2,):
+#             raise ValueError(f"Cannot rescale 1d grid to {len(np.shape(new_domain))}-dimensional domain!")
+#
+#         return Grid(x=(new_domain[1] - new_domain[0]) * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) + new_domain[0],
+#                     as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))
+#
+#     elif grid.dim == 2:
+#         if np.shape(new_domain) != (2, 2):
+#             raise ValueError(f"Cannot rescale 2d grid to {len(np.shape(new_domain))}-dimensional domain!")
+#
+#         return Grid(
+#             x=(new_domain[0][1] - new_domain[0][0]) * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) + new_domain[0][
+#                 0],
+#             y=(new_domain[1][1] - new_domain[1][0]) * (grid.y - grid.y[0]) / (grid.y[-1] - grid.y[0]) + new_domain[1][
+#                 0],
+#             as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))
