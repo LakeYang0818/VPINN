@@ -8,7 +8,7 @@ loss:
   based_on: loss
 
 # Plot f evaluated on the grid
-f_evaluated:
+forcing:
   based_on: plot_function_2d
   select:
     data: data/f_evaluated
@@ -29,9 +29,45 @@ f_integrated:
       y:
         <<: *formatting
 
+# Plot the exact solution
+u_exact:
+  based_on: plot_function_2d
+  select:
+    data: data/u_exact
+
+u_boundary:
+  based_on: grid_boundary2d
+  select:
+    vals: data/u_exact_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - .isel: [ !dag_tag vals, { variable: 1 } ]
+      kwargs:
+        drop: true
+      tag: dim2
+    - .sel: [ !dag_tag vals, { variable: 'u' } ]
+      kwargs:
+        drop: true
+      tag: n
+    - xr.Dataset:
+        - dim1: !dag_tag dim1
+          dim2: !dag_tag dim2
+          n: !dag_tag n
+      tag: data
+  cmap: ~
+  hue: u
+
+predictions:
+  based_on: line
+  select:
+    data: VPINN/predictions
+
 # Plot the test functions
 test_functions:
-  based_on: plot_function_2d
+  based_on: heatmap
   row: n_x
   col: n_y
 
@@ -47,10 +83,10 @@ d2_test_functions:
   select:
     data: data/d2_test_function_values
 
-# Plot the grid (2D)
-grid2d:
-  based_on: grid2d
+# Plot the grid
+grid:
+  based_on: grid1d
 
-# Plot the grid (3D)
-grid3d:
-  based_on: grid3d
+# Plot the solution on the boundary
+grid_boundary:
+  based_on: grid_boundary1d

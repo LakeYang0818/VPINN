@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-from os.path import dirname as up
-import sys
 import h5py as h5
 import numpy as np
+from os.path import dirname as up
+from paramspace.tools import recursive_update
 import ruamel.yaml as yaml
+import sys
 import torch
 import time
-from typing import Any, List, Sequence, Union
+from typing import Union
 import xarray as xr
 
+import coloredlogs
 from dantro._import_tools import import_module_from_path
 from dantro import logging
-import coloredlogs
 
 sys.path.append(up(__file__))
 sys.path.append(up(up(__file__)))
@@ -41,7 +42,7 @@ class VPINN:
             write_start: int = 1,
             write_time: bool = False,
             grid: xr.DataArray,
-            training_data: xr.DataArray = None,
+            training_data: xr.Dataset = None,
             f_integrated: xr.DataArray,
             test_func_values: xr.DataArray,
             d1test_func_values: xr.DataArray = None,
@@ -60,8 +61,9 @@ class VPINN:
             write_every: write every iteration
             write_start: iteration at which to start writing
             write_time: whether to write out the training time into a dataset
-            grid (xr.Dataset): the grid
-            training_data (xr.DataArray): the training_data, consisting of the values of the
+            grid (xr.DataArray): the grid
+            boundary (xr.Dataset): the grid boundary
+            training_data (xr.Datatset): the training_data, consisting of the values of the
               explicit solution on the boundary
             f_integrated (xr.DataArray): dataset containing the values of the external forcing integrated against the test
               functions
@@ -113,35 +115,54 @@ class VPINN:
 
         self._write_every = write_every
         self._write_start = write_start
+        self.write_time = write_time
 
-        self.training_data = training_data
-        self.f_integrated = f_integrated
-        self.test_func_values = test_func_values
-        self.d1test_func_vals = d1test_func_values
-        self.d2test_func_vals = d2test_func_values
-        self.d1test_func_vals_boundary = d1test_func_values_boundary
+        # The grid interior
+        self.grid: torch.Tensor = torch.reshape(torch.from_numpy(
+            grid.isel({val: slice(1, -1) for val in grid.attrs['space_dimensions']}).to_numpy()
+        ).float(), (-1, grid.attrs['grid_dimension'])).requires_grad_(True)
+
+        # Training data (boundary conditions)
+        self.training_dset: xr.Dataset = training_data
+        self.training_coords: torch.Tensor = torch.from_numpy(
+            training_data.sel(variable=grid.attrs['space_dimensions'], drop=True).data.to_numpy()).float()
+        self.training_data: torch.Tensor = torch.from_numpy(
+            training_data.sel(variable=['u'], drop=True).data.to_numpy()).float()
+
+        # Value of the external function integrated against all the test functions
+        self.f_integrated: xr.DataArray = f_integrated
+
+        # Values of the test functions and their derivatives on the grid interior
+        # TODO: transform to tensor here?
+        self.test_func_values: xr.DataArray = test_func_values.isel({var: slice(1, -1) for var in test_func_values.attrs['space_dimensions']})
+        self.d1test_func_values: Union[None, xr.DataArray] = d1test_func_values
+        self.d2test_func_values: Union[None, xr.DataArray] = d2test_func_values
+        self.d1test_func_values_boundary: Union[None, xr.DataArray] = d1test_func_values_boundary
 
     def epoch(self, *, boundary_loss_weight: float = 1.0, variational_loss_weight: float = 1.0):
 
         """ Trains the model for a single epoch """
 
+        start_time = time.time()
+
         # Reset the neural net optimizer
         self.neural_net.optimizer.zero_grad()
 
-        # Calculate the loss
-        # boundary_loss = model.boundary_loss(self.training_data)
-        # variational_loss = model.variational_loss(self.grid, self.f_integrated, self.test_func_vals,
-        #                                           self.d1test_func_vals, self.d2test_func_vals,
-        #                                           self.d1test_func_vals_bd, )
-        # loss = boundary_loss_weight * boundary_loss + variational_loss_weight * variational_loss
-        # loss.backward()
+        # Calculate the boundary loss
+        boundary_loss = torch.nn.functional.mse_loss(self.neural_net.forward(self.training_coords), self.training_data)
 
-        boundary_loss = torch.rand(1)
-        variational_loss = torch.rand(1)
-        loss = torch.rand(1)
+        variational_loss = self.neural_net.variational_loss(self.grid,
+                                                            self.f_integrated,
+                                                            self.test_func_values,
+                                                            self.d1test_func_values,
+                                                            self.d2test_func_values,
+                                                            self.d1test_func_values_boundary, )
+
+        loss = boundary_loss_weight * boundary_loss + variational_loss_weight * variational_loss
+        loss.backward()
 
         # Adjust the model parameters
-        # self.neural_net.optimizer.step()
+        self.neural_net.optimizer.step()
 
         # Track loss values
         self.current_loss = loss.clone().detach().cpu().numpy()
@@ -152,6 +173,11 @@ class VPINN:
         self.write_data()
         self._time += 1
 
+        # Write the training time (wall clock time)
+        if self.write_time:
+            self.dset_time.resize(self.dset_time.shape[0] + 1, axis=0)
+            self.dset_time[-1, :] = time.time() - start_time
+
     def write_data(self):
         """Write the current state (loss and parameter predictions) into the state dataset.
 
@@ -161,7 +187,7 @@ class VPINN:
         """
         if self._time >= self._write_start and (self._time % self._write_every == 0):
             self._dset_loss.resize(self._dset_loss.shape[0] + 1, axis=0)
-            self._dset_loss[-1, :] = [self.current_loss, self.current_boundary_loss, self.current_variational_loss]
+            self._dset_loss[-1, :] = [[self.current_loss], [self.current_boundary_loss], [self.current_variational_loss]]
 
 if __name__ == "__main__":
 
@@ -176,10 +202,10 @@ if __name__ == "__main__":
     model_cfg = cfg[model_name]
 
     # Select the training device and number of threads to use
-    device = model_cfg['Training'].pop('device', None)
+    device = model_cfg['Training'].get('device', None)
     if device is None:
       device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
-    num_threads = model_cfg['Training'].pop('num_threads', None)
+    num_threads = model_cfg['Training'].get('num_threads', None)
     if num_threads is not None:
       torch.set_num_threads(num_threads)
     log.info(f"   Using '{device}' as training device. Number of threads: {torch.get_num_threads()}")
@@ -213,13 +239,13 @@ if __name__ == "__main__":
 
     # Get the data: grid, test function data, and training data. This is loaded from a file,
     # if provided, else synthetically generated
-
-    data: dict = this.get_data(model_cfg.pop('load_from_file', None),
-                                         model_cfg['space'],
-                                         model_cfg['test_functions'],
-                                         forcing = this.Examples[model_cfg['PDE']['type']]['f'],
-                                         var_form = model_cfg['variational_form'],
-                                         h5file = h5file)
+    data: dict = this.get_data(model_cfg.get('load_from_file', None),
+                               model_cfg['space'],
+                               model_cfg['test_functions'],
+                               solution = this.Examples[model_cfg['PDE']['function']]['u'],
+                               forcing = this.Examples[model_cfg['PDE']['function']]['f'],
+                               var_form = model_cfg['variational_form'],
+                               h5file = h5file)
 
     # Initialise the model
     log.info(f"   Initialising the model '{model_name}' ...")
@@ -231,179 +257,59 @@ if __name__ == "__main__":
 
     num_epochs = cfg["num_epochs"]
     log.info(f"   Now commencing training for {num_epochs} epochs ...")
-    for i in range(num_epochs):
+    for _ in range(num_epochs):
         model.epoch(boundary_loss_weight=model_cfg['Training']['boundary_loss_weight'],
                     variational_loss_weight=model_cfg['Training']['variational_loss_weight'])
 
-        log.progress(f"   Completed epoch {i+1} / {num_epochs}; "
-                     f"   current loss: {model.current_loss}")
+        if _ % 100 == 0:
+            log.progress(f"   Completed epoch {_} / {num_epochs}; "
+                         f"   current loss: {model.current_loss[0]}")
 
-    log.info("   Simulation run finished.")
-    log.info("   Wrapping up ...")
+    log.info("   Simulation run finished. Generating prediction ...")
+
+    # Get the plot grid, which can be finer than the training grid, if specified
+    plot_grid = base.construct_grid(recursive_update(model_cfg['space'], model_cfg.get('predictions_grid', {})))
+    predictions = xr.apply_ufunc(lambda x: model.neural_net.forward(torch.from_numpy(x).float()).detach().numpy(),
+                                 plot_grid, vectorize=True, input_core_dims=[['idx']])
+
+    log.debug('   Evaluating the solution on the grid ...')
+    u_exact = xr.apply_ufunc(this.Examples[model_cfg['PDE']['function']]['u'],
+                             plot_grid, input_core_dims=[['idx']], vectorize=True, keep_attrs=True)
+
+    dset_u_exact = h5group.create_dataset(
+        "u_exact",
+        list(u_exact.sizes.values()),
+        maxshape=list(u_exact.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_u_exact.attrs['dim_names'] = list(u_exact.sizes)
+
+    # Set attributes
+    for idx in list(u_exact.sizes):
+        dset_u_exact.attrs['coords_mode__' + str(idx)] = 'values'
+        dset_u_exact.attrs['coords__' + str(idx)] = u_exact.coords[idx].data
+
+    # Write data
+    dset_u_exact[:, ] = u_exact
+
+    dset_predictions = h5group.create_dataset(
+        "predictions",
+        list(predictions.sizes.values()),
+        maxshape=list(predictions.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_predictions.attrs['dim_names'] = list(predictions.sizes)
+
+    # Set the attributes
+    for idx in list(predictions.sizes):
+        dset_predictions.attrs['coords_mode__' + str(idx)] = 'values'
+        dset_predictions.attrs['coords__' + str(idx)] = plot_grid.coords[idx].data
+
+    dset_predictions[:, ] = predictions
+
+    log.info("   Done. Wrapping up ...")
     h5file.close()
 
     log.success("   All done.")
-
-
-#
-# # Local imports
-# from function_definitions import f, u
-# from Utils.Datatypes.Grid import construct_grid, Grid
-# from Utils.Datatypes.DataSet import DataSet
-# from Utils.test_functions import testfunc_grid_evaluation
-# from Utils.utils import integrate
-# import Utils.Plots as Plots
-# from Utils.utils import validate_cfg
-# from Utils.VPINN import VPINN
-
-
-
-#
-# if __name__ == "__main__":
-#
-#     # Validate the configuration to prevent cryptic errors
-#     validate_cfg(cfg)
-#
-#     # Get space parameters from the config
-#     dim: int = cfg['space']['dimension']
-#     eq_type: str = cfg['PDE']['type']
-#     var_form: int = cfg['variational_form']
-#     grid_size: Union[int, Sequence[int]] = cfg['space']['grid_size']['x'] if dim == 1 else [
-#         cfg['space']['grid_size']['x'], cfg['space']['grid_size']['y']]
-#     grid_boundary: Sequence = cfg['space']['boundary']['x'] if dim == 1 else [cfg['space']['boundary']['x'],
-#                                                                               cfg['space']['boundary']['y']]
-#
-#     # Get the neural net architecture from the config
-#     n_nodes: int = cfg['architecture']['nodes_per_layer']
-#     n_layers: int = cfg['architecture']['layers']
-#     architecture: Union[List[int], Any] = [dim] + [n_nodes] * (n_layers + 1) + [1]
-#
-#     # Get PDE constants from the config
-#     PDE_constants: dict = {'Burger': cfg['PDE']['Burger']['nu'],
-#                            'Helmholtz': cfg['PDE']['Helmholtz']['k'],
-#                            'PorousMedium': cfg['PDE']['PorousMedium']['m']}
-#
-#     # Get type and number of test functions in each dimension
-#     test_func_type: str = cfg['Test functions']['type']
-#     test_func_dim: Union[int, Sequence[int]] = cfg['Test functions']['N_test_functions']['x'] if dim == 1 else [
-#         cfg['Test functions']['N_test_functions']['x'], cfg['Test functions']['N_test_functions']['y']]
-#     n_test_funcs: int = test_func_dim if dim == 1 else test_func_dim[0] * test_func_dim[1]
-#
-#     # Construct the grid
-#     print("Constructing grid ...")
-#     grid: Grid = construct_grid(dim=dim, boundary=grid_boundary, grid_size=grid_size,
-#                                 as_tensor=True, requires_grad=False, requires_normals=(var_form >= 2))
-#
-#     # Evaluate the test functions and any required derivatives on the grid interior
-#     print("Evaluating test functions on the grid interior ... ")
-#     test_func_vals: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
-#                                                        d=0, where='interior', which=test_func_type)
-#     d1test_func_vals: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
-#                                                          d=1, where='interior',
-#                                                          which=test_func_type) if var_form >= 1 else None
-#     d2test_func_vals: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
-#                                                          d=2, where='interior',
-#                                                          which=test_func_type) if var_form >= 2 else None
-#
-#     # Evaluate the test functions on the grid boundary
-#     d1test_func_vals_bd: DataSet = testfunc_grid_evaluation(grid, test_func_dim,
-#                                                             d=1, where='boundary',
-#                                                             which=test_func_type) if var_form >= 2 else None
-#
-#     # The weight function for the test functions. Takes an index or a tuple of indices
-#     # TO DO: this should be done more carefully
-#     if cfg['Test functions']['weighting']:
-#         weight_function = lambda x: 2 ** (-x[0]) * 2 ** (-x[1]) if dim == 2 else 2 ** (-x)
-#     else:
-#         weight_function = lambda x: 1
-#
-#     # Integrate the external function over the grid against all the test functions.
-#     # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
-#     print("Integrating test functions ...")
-#     f_integrated: DataSet = DataSet(coords=test_func_vals.coords,
-#                                     data=[integrate(f(grid.interior), test_func_vals.data[i], domain_volume=grid.volume)
-#                                           for i in range(n_test_funcs)],
-#                                     as_tensor=True,
-#                                     requires_grad=False)
-#
-#     # Instantiate the model class
-#     model: VPINN = VPINN(architecture, eq_type, var_form,
-#                          pde_constants=PDE_constants,
-#                          learning_rate=cfg['learning_rate'],
-#                          activation_func=torch.relu).to(device)
-#
-#     # Turn on tracking for the grid interior, on which the variational loss is calculated
-#     grid.interior.requires_grad = True
-#
-#     # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.
-#     # For the Burgers equation, training data is the initial data given
-#     # on the lower temporal boundary.
-#     print("Generating training data ...")
-#     if eq_type in ['Burger', 'PorousMedium']:
-#         training_data: DataSet = DataSet(coords=grid.lower_boundary, data=u(grid.lower_boundary), as_tensor=True,
-#                                          requires_grad=False)
-#     else:
-#         training_data: DataSet = DataSet(coords=grid.boundary, data=u(grid.boundary), as_tensor=True,
-#                                          requires_grad=False)
-#
-#     # Train the model
-#     print("Commencing training ...")
-#     b_weight, v_weight = cfg['boundary_loss_weight'], cfg['variational_loss_weight']
-#     start_time = time.time()
-#     for it in range(cfg['N_iterations'] + 1):
-#
-#         model.optimizer.zero_grad()
-#
-#         # Calculate the loss
-#         loss_b = model.boundary_loss(training_data)
-#         loss_v = model.variational_loss(grid, f_integrated, test_func_vals, d1test_func_vals, d2test_func_vals,
-#                                         d1test_func_vals_bd, weight_function)
-#         loss = b_weight * loss_b + v_weight * loss_v
-#         loss.backward()
-#
-#         # Adjust the model parameters
-#         model.optimizer.step()
-#
-#         # Track loss values
-#         loss_glob, loss_b_glob, loss_v_glob = loss.item(), loss_b.item(), loss_v.item()
-#
-#         if it % 10 == 0:
-#             model.update_loss_tracker(it, loss_glob, loss_b_glob, loss_v_glob)
-#         if it % 100 == 0:
-#             print(f"Iteration {it}: total loss: {loss_glob}, loss_b: {loss_b_glob}, loss_v: {loss_v_glob}")
-#
-#         del loss
-#
-#     print(f"Training completed in {np.around(time.time() - start_time, 3)} seconds.")
-#
-#     # Plot the results
-#     print("Plotting ... ")
-#     rcParams.update(cfg['plots']['rcParams'])
-#
-#     # Generate the plot grid, which may be finer than the training grid
-#     plot_res = cfg['plots']['plot_resolution']['x'] if dim == 1 else [cfg['plots']['plot_resolution']['x'],
-#                                                                       cfg['plots']['plot_resolution']['y']]
-#     plot_grid: Grid = construct_grid(dim=dim, boundary=grid_boundary, grid_size=plot_res,
-#                                      requires_grad=False)
-#
-#     # Get the model predictions on the plotting grid. Turn off tracking for the prediction data.
-#     predictions = model.forward(plot_grid.data).detach()
-#
-#     # Plot an animation of the predictions
-#     if grid.dim == 2 and cfg['plots']['plot_animation']:
-#         Plots.animate(plot_grid, predictions)
-#
-#     # Plot predicted vs actual values
-#     Plots.plot_prediction(cfg, plot_grid, predictions, model.loss_tracker, grid_shape=plot_res,
-#                           plot_info_box=cfg['plots']['plot_info_box'])
-#
-#     # Plot loss over time
-#     Plots.plot_loss(model.loss_tracker, write_data=cfg['plots']['write_loss_data'])
-#
-#     # Plot test functions
-#     # Plots.plot_test_functions(plot_grid, order=min(6, n_test_funcs), d=1, which=test_func_type)
-#
-#     # Save the config
-#     Plots.write_config(cfg)
-#
-#     print("Done.")

@@ -1,15 +1,12 @@
 import torch
 from torch import nn
 from typing import Any, List, Union
-
+import xarray as xr
 # Local imports
-from .data_set import DataSet
-from .grid import Grid
 from .Variational_forms import *
 
 
 def get_activation_funcs(n_layers: int, cfg: Union[str, dict] = None) -> List[Any]:
-
     """Extracts the activation functions from the config"""
 
     def return_function(name: str):
@@ -30,7 +27,7 @@ def get_activation_funcs(n_layers: int, cfg: Union[str, dict] = None) -> List[An
         else:
             raise ValueError(f"Unrecognised activation function {name}!")
 
-    funcs = [None] * (n_layers+1)
+    funcs = [None] * (n_layers + 1)
 
     if cfg is None:
         return funcs
@@ -43,43 +40,11 @@ def get_activation_funcs(n_layers: int, cfg: Union[str, dict] = None) -> List[An
             elif val in [-1]:
                 funcs[-1] = return_function(cfg[-1])
             else:
-                funcs[val-1] = return_function(cfg[val])
+                funcs[val - 1] = return_function(cfg[val])
 
         return funcs
     else:
         raise ValueError(f"Unrecognised argument {cfg} for 'activation_funcs'!")
-
-
-def get_optimizer(name):
-
-    """Returns the optimizer from the config"""
-
-    if name == 'Adagrad':
-        return torch.optim.Adagrad
-    elif name == 'Adam':
-        return torch.optim.Adam
-    elif name == 'AdamW':
-        return torch.optim.AdamW
-    elif name == 'SparseAdam':
-        return torch.optim.SparseAdam
-    elif name == 'Adamax':
-        return torch.optim.Adamax
-    elif name == 'ASGD':
-        return torch.optim.ASGD
-    elif name == 'LBFGS':
-        return torch.optim.LBFGS
-    elif name == 'NAdam':
-        return torch.optim.NAdam
-    elif name == 'RAdam':
-        return torch.optim.RAdam
-    elif name == 'RMSprop':
-        return torch.optim.RMSprop
-    elif name == 'Rprop':
-        return torch.optim.Rprop
-    elif name == 'SGD':
-        return torch.optim.SGD
-    else:
-        raise ValueError(f'Unrecognized opimiser {name}!')
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -87,6 +52,7 @@ def get_optimizer(name):
 # ----------------------------------------------------------------------------------------------------------------------
 
 class NeuralNet(nn.Module):
+
     """ A variational physics-informed neural net. Inherits from the nn.Module parent."""
 
     VAR_FORMS = {0, 1, 2}
@@ -100,21 +66,36 @@ class NeuralNet(nn.Module):
         "Weak1D"
     }
 
+    # Torch optimizers
+    OPTIMIZERS = {
+        'Adagrad': torch.optim.Adagrad,
+        'Adam': torch.optim.Adam,
+        'AdamW': torch.optim.AdamW,
+        'SparseAdam': torch.optim.SparseAdam,
+        'Adamax': torch.optim.Adamax,
+        'ASGD': torch.optim.ASGD,
+        'LBFGS': torch.optim.LBFGS,
+        'NAdam': torch.optim.NAdam,
+        'RAdam': torch.optim.RAdam,
+        'RMSprop': torch.optim.RMSprop,
+        'Rprop': torch.optim.Rprop,
+        'SGD': torch.optim.SGD,
+    }
+
     def __init__(self,
-                *,
-                input_size: int,
-                output_size: int,
-                num_layers: int,
-                nodes_per_layer: int,
-                activation_funcs: dict = None,
-                optimizer: str = 'Adam',
-                learning_rate: float = 0.001,
-                bias: bool = False,
-                init_bias: tuple = None,
-                eq_type: str = 'Poisson',
-                var_form: int = 1,
-                pde_constants: dict = None,
-                **__):
+                 *,
+                 input_size: int,
+                 output_size: int,
+                 num_layers: int,
+                 nodes_per_layer: int,
+                 activation_funcs: dict = None,
+                 optimizer: str = 'Adam',
+                 learning_rate: float = 0.001,
+                 bias: bool = False,
+                 init_bias: tuple = None,
+                 eq_type: str = 'Poisson',
+                 var_form: int = 1,
+                 pde_constants: dict = None):
 
         """Initialises the neural net.
         :param input_size: the number of input values
@@ -128,7 +109,6 @@ class NeuralNet(nn.Module):
         :param eq_type: the equation type of the PDE in question
         :param var_form: the variational form to use for the loss function
         :param pde_constants: the constants for the pde in use
-        :param __: Additional model parameters (ignored)
         Raises:
             ValueError: if the equation type is unrecognized
             ValueError: if the variational form is unrecognized
@@ -159,7 +139,7 @@ class NeuralNet(nn.Module):
             self.layers.append(layer)
 
         # Get the optimizer
-        self.optimizer = get_optimizer(optimizer)(self.parameters(), lr=learning_rate)
+        self.optimizer = self.OPTIMIZERS[optimizer](self.parameters(), lr=learning_rate)
 
         # Initialize the loss tracker dictionary, which can be used to later evaluate the training progress
         self._loss_tracker: dict = {'iter': [],
@@ -178,9 +158,11 @@ class NeuralNet(nn.Module):
 
     # The model forward pass
     def forward(self, x):
-        for i in range(len(self.layers) - 1):
-            x = self.activation_func(self.layers[i](x))
-        x = self.layers[-1](x)
+        for i in range(len(self.layers)):
+            if self.activation_funcs[i] is None:
+                x = self.layers[i](x)
+            else:
+                x = self.activation_funcs[i](self.layers[i](x))
         return x
 
     # Computes the first derivative of the model output. x can be a single tensor or a stack of tensors
@@ -191,8 +173,8 @@ class NeuralNet(nn.Module):
 
     # Computes the second derivative of the model output. x can be a single tensor or a stack of tensors
     def gradgrad(self, x, *, requires_grad: bool = True):
-        y = self.forward(x)
-        first_derivative = torch.autograd.grad(y, x, grad_outputs=torch.ones_like(y), create_graph=True)[0]
+
+        first_derivative = self.grad(x, requires_grad=True)
         second_derivative = torch.autograd.grad(first_derivative, x,
                                                 grad_outputs=torch.ones_like(x), create_graph=requires_grad)[0]
 
@@ -200,27 +182,14 @@ class NeuralNet(nn.Module):
 
     # ... Loss functions ...............................................................................................
 
-    def boundary_loss(self, training_data: DataSet) -> torch.Tensor:
-
-        """Calculates the loss on the domain boundary.
-
-        :param training_data: the model training data
-        :return: the boundary loss
-        """
-
-        # Conduct a forward pass on the training data
-        u = self.forward(training_data.coords)
-
-        # Calculate the pointwise error
-        return torch.nn.functional.mse_loss(u, training_data.data)
 
     def variational_loss(self,
-                         grid: Grid,
-                         f_integrated: DataSet,
-                         test_func_vals: DataSet,
-                         d1test_func_vals: DataSet = None,
-                         d2test_func_vals: DataSet = None,
-                         d1test_func_vals_bd: DataSet = None,
+                         grid,
+                         f_integrated,
+                         test_func_vals,
+                         d1test_func_vals=None,
+                         d2test_func_vals=None,
+                         d1test_func_vals_bd=None,
                          weight_function=lambda x: 1) -> torch.Tensor:
 
         """ Calculates the variational loss on the grid interior.

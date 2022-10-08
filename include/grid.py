@@ -10,7 +10,7 @@ def construct_grid(space_dict: dict, *, lower: int = None, upper: int = None, dt
     :param lower: (optional) the lower grid value to use if no extent is given
     :param upper: (optional) the upper grid value to use if no extent is given. Defaults to the extent of the grid.
     :param dtype: (optional) the grid value datatype to use
-    :return: the grid (an xarray.DataArray)
+    :return: the grid (xarray.DataArray)
 
     raises:
         ValueError: for grid dimensions of size greater than 3 (currently not implemented)
@@ -20,14 +20,14 @@ def construct_grid(space_dict: dict, *, lower: int = None, upper: int = None, dt
 
     # Create the coordinate dictionary
     for key, entry in space_dict.items():
-        l, u = entry.pop('extent', (lower, upper))
+        l, u = entry.get('extent', (lower, upper))
         u = entry['size'] if u is None else u
         coords[key] = (key, np.linspace(l, u, entry['size'], dtype=dtype))
 
     # Create the meshgrid. The order of the indices needs to be adapted to the output shape of np.meshgrid.
     indices = list(coords.keys()) + ['idx']
     if len(indices) == 2:
-        data = coords[indices[0]][1]
+        data = np.reshape([coords[indices[0]][1]], (-1, 1))
 
     elif len(indices) == 3:
 
@@ -52,363 +52,94 @@ def construct_grid(space_dict: dict, *, lower: int = None, upper: int = None, dt
 
     # Calculate grid density for integration
     n_points, volume = np.prod(list(res.sizes.values()))/res.sizes['idx'], 1
+    space_dims = []
     for key, range in res.coords.items():
         if key == 'idx':
             continue
-        volume *= (range.isel({key: -1}) - range.isel({key: 0}))
+        volume *= (range.isel({key: -1}) - range.isel({key: 0})).data
+        space_dims.append(str(key))
 
     res.attrs['grid_density'] = volume / n_points
+    res.attrs['space_dimensions'] = space_dims
 
     return res
 
 
-from typing import Sequence, Union, Any
-import torch
-import warnings
+def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
 
-class Grid:
+    """Extracts the boundary from a grid. Returns the boundary with unit normals associated with each point."""
 
-    def __init__(self,
-                 x: Sequence,
-                 y: Sequence = None,
-                 *,
-                 as_tensor: bool = True,
-                 dtype=torch.float,
-                 requires_grad: bool = False,
-                 requires_normals: bool = False):
+    # 1D boundary
+    if grid.attrs['grid_dimension'] == 1:
 
-        """Constructs a Grid object. A grid consists of pairs of x- and y values, which may have
-        different dimensions. The Grid class contains information on its boundary,
-        its interior points, as well its dimension and size. Can be 1D or 2D.
+        x = grid.attrs['space_dimensions'][0]
+        x_0, x_1 = grid.isel({x: 0, 'idx': 0}, drop=True).data, grid.isel({x: -1, 'idx': 0}, drop=True).data
 
-        :param x: the x coordinates
-        :param y: the y coordinates. Can be None.
-        :param as_tensor: whether to return the Grid as points of torch.Tensors
-        :param dtype: the data type to use
-        :param requires_grad: whether the grid points require gradients, if torch.Tensors are being used
-        :paran requires_normals: whether to calculate the grid boundary normal vectors
+        return xarray.Dataset(
+            coords=dict(idx=('idx', [0, 1]), variable=('variable', [x, 'n'])),
+            data_vars=dict(data=(['idx', 'variable'], [[x_0, -1],  [x_1, +1]])))
 
-        :raises ValueError: if x and y are of different types
-        """
+    # 2D boundary
+    elif grid.attrs['grid_dimension'] == 2:
 
-        # Ascertain valid and compatible arguments
-        if x is None:
-            raise ValueError('Cannot create an empty grid!')
+        x, y = grid.attrs['space_dimensions']
+        len_x, len_y = len(grid.coords[x].data), len(grid.coords[y].data)
 
-        if len(x) == 0:
-            raise ValueError(f"Invalid arg 'x' for grid: cannot generate grid from empty {type(x)}.")
-        else:
-            self._n_x = len(x)
+        x_vals = y_vals = n_vals = np.array([])
 
-        if isinstance(x, torch.Tensor):
-            if x.dim() > 2:
-                raise ValueError(f"Invalid arg 'x' for grid: cannot generate grid from {x.dim()}-dimensional tensor.")
-            elif not as_tensor:
-                warnings.warn(f"You have passed a {type(x)} argument for 'x' but set 'as_tensor = False'. "
-                              f"In this case, 'as_tensor' will be set to true.")
-                self._as_tensor = True
+        # Bottom and top boundaries
+        for i in [0, -1]:
+            x_vals = np.append(x_vals, grid.coords[x].data[slice(1, None) if i == 0 else slice(None, -1)])
+            y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[i], len_x-1))
+            n_vals = np.append(n_vals, np.repeat(1 if i == 0 else i, len_x-1))
 
-        if requires_grad and not as_tensor:
-            warnings.warn("You have set 'as_tensor' to False but 'requires_grad' to 'True'. 'requires_grad' is only"
-                          " effective for torch.Tensor types, and will be ignored. Alternatively, set "
-                          "'as_tensor' to 'True' or pass torch.Tensor types as coordinate arguments.")
-            requires_grad = False
+        # Left and right boundaries
+        for i in [0, -1]:
+            y_vals = np.append(y_vals, grid.coords[y].data[slice(1, -1) if i == 0 else slice(None, None)])
+            x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[i], len_y-1))
+            n_vals = np.append(n_vals, np.repeat(1 if i == -1 else -1, len_y - 1))
 
-        if y is not None:
-            if isinstance(y, torch.Tensor):
-                if y.size() == torch.Size([0]):
-                    raise ValueError(f"Invalid arg 'y' for grid: cannot generate grid from empty tensor.")
-                elif y.dim() > 2:
-                    raise ValueError(
-                        f"Invalid arg 'y' for grid: cannot generate grid from {y.dim()}-dimensional tensor.")
-                elif not as_tensor:
-                    warnings.warn(f"You have passed a {type(y)} argument for 'y' but set 'as_tensor = False'. "
-                                  f"In this case, 'as_tensor' will be set to true.")
-                    as_tensor = True
-                self._n_y = y.size()[0]
-            else:
-                if len(y) == 0:
-                    raise ValueError(f"Invalid arg 'y' for grid: cannot generate grid from empty {type(y)}.")
-                else:
-                    self._n_y = len(y)
-            self._dim = 2
-        else:
-            self._dim = 1
+        return xarray.Dataset(coords=dict(idx=('idx', np.arange(0, len(x_vals), 1)), variable=('variable', [x, y, 'n'])),
+                              data_vars=dict(data=(['idx', 'variable'], np.stack([x_vals, y_vals, n_vals], axis=1))))
 
-        # Create coordinate axes
-        if not as_tensor:
-            self._x = np.resize(np.array(x).astype(dtype), (self._n_x, 1))
-            self._n_x = len(self._x)
-            self._y = np.resize(np.array(y).astype(dtype), (self._n_y, 1)) if y is not None else np.array([])
-            self._n_y = len(self._y)
-            self._dim = 1 + (self._n_y > 1)
-        else:
-            if isinstance(x, torch.Tensor):
-                self._x = torch.reshape(torch.tensor(x.detach().clone().numpy(), dtype=dtype), (self._n_x, 1))
-            else:
-                self._x = torch.reshape(torch.tensor(x, dtype=dtype), (self._n_x, 1))
+    else:
+        x, y, z = grid.attrs['space_dimensions']
+        len_x, len_y, len_z = len(grid.coords[x].data), len(grid.coords[y].data), len(grid.coords[z].data)
 
-            if y is not None:
-                if isinstance(y, torch.Tensor):
-                    self._y = torch.reshape(torch.tensor(y.detach().clone().numpy(), dtype=dtype),
-                                            (self._n_y, 1))
-                else:
-                    self._y = torch.reshape(torch.tensor(y, dtype=dtype), (self._n_y, 1))
+        x_vals = y_vals = z_vals = n_vals = np.array([])
 
-        # Create datasets
-        if y is None:
-            if not as_tensor:
-                self._data = np.resize(self._x, (self._n_x, 1))
-                self._boundary = np.resize(np.array([self._x[0], self._x[-1]]), (2, 1))
-                self._interior = np.resize(self._x[-1:1], (self._n_x - 2, 1))
-            else:
-                self._data = self._x
-                self._boundary = torch.reshape(torch.stack([self._x[0], self._x[-1]]), (2, 1))
-                self._interior = torch.reshape(self._x[1:-1], (self._n_x - 2, 1))
-            self._size = self._n_x
-        else:
+        # Bottom and top boundaries
+        for i in [0, -1]:
+            for j in range(len_y):
+                x_vals = np.append(x_vals, grid.coords[x].data)
+                y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[j], len_x))
+            z_vals = np.append(z_vals, np.repeat(grid.coords[z].data[i], (len_x)*(len_y)))
+            n_vals = np.append(n_vals, np.repeat(1 if i == 0 else i, (len_x)*(len_y)))
 
-            # Collect data and interior points
-            data, interior = [], []
-            for j in range(self._n_y):
-                for i in range(self._n_x):
-                    if not as_tensor:
-                        point = [self._x[i], self._y[j]]
-                    else:
-                        point = torch.reshape(torch.stack([self._x[i], self._y[j]]), (1, 2))
-                    data.append(point)
-                    if i == 0 or i == (self._n_x - 1) or j == 0 or j == (self._n_y - 1):
-                        continue
-                    else:
-                        interior.append(point)
+        # Left and right boundaries
+        for i in [0, -1]:
+            for j in range(1, len_z-1):
+                y_vals = np.append(y_vals, grid.coords[y].data)
+                z_vals = np.append(z_vals, np.repeat(grid.coords[z].data[j], len_y))
+            x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[i], (len_y) * (len_z-2)))
+            n_vals = np.append(n_vals, np.repeat(1 if i == -1 else -1, (len_y) * (len_z-2)))
 
-            #  Collect boundary points. The boundary is the contour of the domain, oriented counter-clockwise
-            lower, right, upper, left = [], [], [], []
-            for i in range(self._n_x):
-                if not as_tensor:
-                    lower.append([self._x[i], self._y[0]])
-                    upper.append([self._x[len(self._x) - i - 1], self._y[-1]])
-                else:
-                    lower.append(torch.reshape(torch.stack([self._x[i], self._y[0]]), (1, 2)))
-                    upper.append(torch.reshape(torch.stack([self._x[len(self._x) - i - 1], self._y[-1]]), (1, 2)))
-            for j in range(self._n_y):
-                if not as_tensor:
-                    right.append([self._x[-1], self._y[j]])
-                    left.append([self._x[0], self._y[len(self._y) - j - 1]])
-                else:
-                    right.append(torch.reshape(torch.stack([self._x[-1], self._y[j]]), (1, 2)))
-                    left.append(torch.reshape(torch.stack([self._x[0], self._y[len(self._y) - j - 1]]), (1, 2)))
-            boundary = lower[:-1] + right[:-1] + upper[:-1] + left[:-1]
+        # Front and back boundaries
+        for i in [0, -1]:
+            for j in range(1, len_x-1):
+                z_vals = np.append(z_vals, grid.coords[z].data[1:-1])
+                x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[j], len_z-2))
+            y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[i], (len_x-2)*(len_z-2)))
+            n_vals = np.append(n_vals, np.repeat(1 if i == -1 else -1, (len_x-2)*(len_z-2)))
 
-            if not as_tensor:
-                self._data = np.resize(np.array(data), (self._n_x * self._n_y, 2))
-                self._boundary = np.resize(np.array(boundary), (2 * (self._n_x + self._n_y - 2), 2))
-                self._lower = np.resize(np.array(lower), (self._n_x, 2))
-                self._right = np.resize(np.array(right), (self._n_y, 2))
-                self._upper = np.resize(np.array(upper), (self._n_x, 2))
-                self._left = np.resize(np.array(left), (self._n_y, 2))
-                self._interior = np.resize(np.array(interior),
-                                           ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
-            else:
-                self._data = torch.reshape(torch.stack(data), (self._n_x * self._n_y, 2))
-                self._boundary = torch.reshape(torch.stack(boundary), (2 * (self._n_x + self._n_y - 2), 2))
-                self._lower = torch.reshape(torch.stack(lower), (self._n_x, 2))
-                self._right = torch.reshape(torch.stack(right), (self._n_y, 2))
-                self._upper = torch.reshape(torch.stack(upper), (self._n_x, 2))
-                self._left = torch.reshape(torch.stack(left), (self._n_y, 2))
-                self._interior = torch.reshape(torch.stack(interior),
-                                               ((self._n_x - 2) * (self._n_y - 2), 2)) if interior != [] else []
+        return xarray.Dataset(
+            coords=dict(idx=('idx', np.arange(0, len(x_vals), 1)), variable=('variable', [x, y, z, 'n'])),
+            data_vars=dict(data=(['idx', 'variable'], np.stack([x_vals, y_vals, z_vals, n_vals], axis=1))))
 
-            self._size = self._n_x * self._n_y
+#TODO
+def get_interior():
+    pass
 
-        # Get the grid boundary normals
-        if requires_normals:
-            if self._dim == 1:
-                if as_tensor:
-                    self._normals = torch.stack([torch.tensor([-1], dtype=dtype), torch.tensor([1], dtype=dtype)])
-                else:
-                    self._normals = np.array([[-1], [1]])
-            else:
-                if as_tensor:
-                    self._normals = torch.stack(
-                        [torch.tensor([0, 1])] * (len(self._x) - 1) +
-                        [torch.tensor([-1, 0])] * (len(self._y) - 1) +
-                        [torch.tensor([0, -1])] * (len(self._x) - 1) +
-                        [torch.tensor([1, 0])] * (len(self._y) - 1)
-                    )
-                else:
-                    self._normals = np.array(
-                        [[0, 1]] * (len(self._x) - 1) +
-                        [[-1, 0]] * (len(self._y) - 1) +
-                        [[0, -1]] * (len(self._x) - 1) +
-                        [[1, 0]] * (len(self._y) - 1)
-                    )
-        else:
-            self._normals = None
-
-        # Set requires_gradient flag, if required
-        if as_tensor and requires_grad:
-            self._x.requires_grad = requires_grad
-            if y is not None:
-                self._y.requires_grad = requires_grad
-            self._data.requires_grad = requires_grad
-            self._boundary.requires_grad = requires_grad
-            self._interior.requires_grad = requires_grad
-
-        self._as_tensor = as_tensor
-        self._dtype = dtype
-        self._req_grad = requires_grad
-
-    # .. Magic methods .................................................................................................
-
-    def __getitem__(self, item):
-        return self._data[item]
-
-    def __iter__(self):
-        for i in range(self._size):
-            yield self._data[i]
-
-    def __str__(self) -> str:
-        output = f"Grid of size {self._n_x}"
-        if self._dim == 2:
-            output += f" x {self._n_y}"
-        output += f"; x interval: [{np.around(min(self._x), 4)}, {np.around(max(self._x), 4)}]"
-        if self._dim == 2:
-            output += f"; y interval: [{np.around(min(self._y), 4)}, {np.around(max(self._y), 4)}]"
-        return output
-
-    # .. Properties ....................................................................................................
-
-    @property
-    def boundary(self):
-        return self._boundary
-
-    @property
-    def lower_boundary(self):
-        if self.dim == 1:
-            raise ValueError("1-dimensional grid has no attribute 'lower_boundary'!")
-        else:
-            return self._lower
-
-    @property
-    def upper_boundary(self):
-        if self.dim == 1:
-            raise ValueError("1-dimensional grid has no attribute 'upper_boundary'!")
-        else:
-            return self._upper
-
-    @property
-    def right_boundary(self):
-        if self.dim == 1:
-            raise ValueError("1-dimensional grid has no attribute 'right_boundary'!")
-        else:
-            return self._right
-
-    @property
-    def left_boundary(self):
-        if self.dim == 1:
-            raise ValueError("1-dimensional grid has no attribute 'left_boundary'!")
-        else:
-            return self._left
-
-
-    @property
-    def boundary_volume(self):
-        if self.dim == 1:
-            return self._x[-1] - self._x[0]
-        elif self.dim == 2:
-            return 2 * (self._x[-1] - self._x[0]) + 2 * (self._y[-1] - self._y[0])
-
-    @property
-    def data(self):
-        return self._data
-
-    @property
-    def dim(self):
-        return self._dim
-
-    @property
-    def interior(self):
-        return self._interior
-
-    @property
-    def is_tensor(self):
-        return self._as_tensor
-
-    @property
-    def normals(self):
-        return self._normals
-
-    @property
-    def size(self):
-        return self._size
-
-    @property
-    def volume(self):
-        if self.dim == 1:
-            return self._x[-1] - self._x[0]
-        elif self.dim == 2:
-            return (self._x[-1] - self._x[0]) * (self._y[-1] - self._y[0])
-
-    @property
-    def x(self):
-        return self._x
-
-    @property
-    def y(self):
-        return self._y
-
-    @property
-    def dtype(self):
-        return self._dtype
-
-    @property
-    def requires_grad(self):
-        return self._req_grad
-
-
-# ... Grid constructor ................................................................................................
-
-# def construct_grid(*, dim: int,
-#                    boundary: Sequence,
-#                    grid_size: Union[int, Sequence[int]],
-#                    as_tensor: bool = True,
-#                    dtype=torch.float,
-#                    requires_grad: bool = False,
-#                    requires_normals: bool = False) -> Grid:
-#     """Constructs a grid of the given dimension.
-#
-#     :param dim: the dimension of the grid
-#     :param boundary: the boundaries of the grid
-#     :param grid_size: the number of grid points in each dimension
-#     :param as_tensor: whether to return the grid points as tensors
-#     :param dtype: the datatype of the grid points
-#     :param requires_grad: whether the grid points require differentiability
-#     :param requires_normals: whether the grid boundary normal values need to be calculated
-#     :return: the grid
-#     """
-#
-#     def _grid_1d(lower: float, upper: float, n_points: int) -> Sequence:
-#
-#         """Constructs a one-dimensional grid."""
-#
-#         step_size = (1.0 * upper - lower) / (1.0 * n_points - 1)
-#
-#         return [lower + _ * step_size for _ in range(n_points)]
-#
-#     if dim == 1:
-#
-#         return Grid(x=_grid_1d(boundary[0], boundary[1], grid_size),
-#                     as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad, requires_normals=requires_normals)
-#
-#     elif dim == 2:
-#         x: Sequence = _grid_1d(boundary[0][0], boundary[0][1], grid_size[0])
-#         y: Sequence = _grid_1d(boundary[1][0], boundary[1][1], grid_size[1])
-#
-#         return Grid(x=x, y=y, as_tensor=as_tensor, dtype=dtype, requires_grad=requires_grad,
-#                     requires_normals=requires_normals)
-#
-#
 # def rescale_grid(grid: Grid, *, new_domain) -> Grid:
 #     """ Rescales a grid to a new domain.
 #

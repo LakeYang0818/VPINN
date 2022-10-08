@@ -83,6 +83,64 @@ loss:
     set_scales:
       y: log
 
+# ======================================================================================================================
+#  ╔═╗╦═╗╦╔╦╗  ╔═╗╦  ╔═╗╔╦╗╔═╗
+#  ║ ╦╠╦╝║ ║║  ╠═╝║  ║ ║ ║ ╚═╗
+#  ╚═╝╩╚═╩═╩╝  ╩  ╩═╝╚═╝ ╩ ╚═╝
+# ======================================================================================================================
+
+# 1-dimensional grid
+grid1d:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.scatter
+  select:
+    grid: data/grid
+  transform:
+    - .isel: [!dag_tag grid, {idx: 0} ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - len: [!dag_prev ]
+    - np.zeros: [!dag_prev ]
+    - xr.Dataset:
+      - dim1: !dag_tag dim1
+        dim2: !dag_prev
+      tag: data
+  x: dim1
+  y: dim2
+
+grid_boundary1d:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.scatter
+  select:
+    vals: data/grid_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - len: [!dag_prev ]
+    - np.zeros: [!dag_prev ]
+      tag: dim2
+    - .isel: [ !dag_tag vals, { variable: -1 } ]
+      kwargs:
+        drop: true
+      tag: n
+    - xr.Dataset:
+        - dim1: !dag_tag dim1
+          dim2: !dag_tag dim2
+          n: !dag_tag n
+      tag: data
+  x: dim1
+  y: dim2
+  hue: n
+  cmap: &normals_cmap
+    from_values:
+      -1: *darkblue
+      1: *red
+
 # 2-dimensional grid
 grid2d:
   based_on:
@@ -91,21 +149,51 @@ grid2d:
   select:
     grid: data/grid
   transform:
-    - .isel: [!dag_prev , {idx: 0}]
+    - .isel: [!dag_tag grid , {idx: 0}]
       kwargs:
         drop: true
-      tag: x
+      tag: dim1
     - .isel: [!dag_tag grid, {idx: 1}]
       kwargs:
         drop: true
-      tag: y
+      tag: dim2
     - xr.Dataset:
-      - idx0: !dag_tag x
-        idx1: !dag_tag y
-    - print: [!dag_prev ]
+      - dim1: !dag_tag dim1
+        dim2: !dag_tag dim2
       tag: data
-  x: idx0
-  y: idx1
+  x: dim1
+  y: dim2
+
+# 2d grid boundary
+grid_boundary2d:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.scatter
+  select:
+    vals: data/grid_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - .isel: [ !dag_tag vals, { variable: 1 } ]
+      kwargs:
+        drop: true
+      tag: dim2
+    - .sel: [ !dag_tag vals, { variable: 'n' } ]
+      kwargs:
+        drop: true
+      tag: n
+    - xr.Dataset:
+        - dim1: !dag_tag dim1
+          dim2: !dag_tag dim2
+          n: !dag_tag n
+      tag: data
+  x: dim1
+  y: dim2
+  hue: n
+  cmap:
+    <<: *normals_cmap
 
 # 3-dimensional grid
 grid3d:
@@ -134,31 +222,99 @@ grid3d:
     - .flatten: [ !dag_prev ]
       tag: z
     - xr.Dataset:
-      - idx0: !dag_tag x
-        idx1: !dag_tag y
-        idx2: !dag_tag z
+      - dim1: !dag_tag x
+        dim2: !dag_tag y
+        dim3: !dag_tag z
       tag: data
-  x: idx0
-  y: idx1
-  z: idx2
-  helpers:
-    set_labels:
-      x: x
-      y: y
-      z: z
+  x: dim1
+  y: dim2
+  z: dim3
+
+# 3-dimensional grid boundary
+grid_boundary3d:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.scatter3d
+  select:
+    vals: data/grid_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: x
+    - .isel: [ !dag_tag vals, { variable: 1 } ]
+      kwargs:
+        drop: true
+      tag: y
+    - .isel: [ !dag_tag vals, { variable: 2 } ]
+      kwargs:
+        drop: true
+      tag: z
+    - .isel: [ !dag_tag vals, { variable: -1 } ]
+      kwargs:
+        drop: true
+      tag: n
+    - xr.Dataset:
+        - x: !dag_tag x
+          y: !dag_tag y
+          z: !dag_tag z
+          n: !dag_tag n
+      tag: data
+  x: x
+  y: y
+  z: z
+  hue: n
+  cmap:
+    <<: *normals_cmap
+
+# ======================================================================================================================
+#  ╔═╗╦═╗╔═╗╔╦╗╦╔═╗╔╦╗╦╔═╗╔╗╔╔═╗
+#  ╠═╝╠╦╝║╣  ║║║║   ║ ║║ ║║║║╚═╗
+#  ╩  ╩╚═╚═╝═╩╝╩╚═╝ ╩ ╩╚═╝╝╚╝╚═╝
+# ======================================================================================================================
+line:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
 
 # Plot a function on a two-dimensional domain
-plot_function_2d:
+heatmap:
   based_on:
     - .creator.universe
     - .plot.facet_grid.pcolormesh
-  select:
-    data: data/test_function_values
-  x: x
-  y: y
-  cmap:
+  cmap: &cmap
     continuous: true
     from_values:
       0: *darkblue
       0.5: *red
       1: *yellow
+
+#u_boundary:
+#  based_on:
+#    - .creator.universe
+#    - .plot.facet_grid.scatter
+#  select:
+#    vals: data/u_exact_boundary
+#  transform:
+#    - .isel: [ !dag_prev , {variable: 0}]
+#      kwargs:
+#        drop: true
+#      tag: x
+#    - .isel: [ !dag_tag vals, {variable: 1}]
+#      kwargs:
+#        drop: true
+#      tag: y
+#    - .isel: [ !dag_tag vals, {variable: 2}]
+#      kwargs:
+#        drop: true
+#      tag: u
+#    - xr.Dataset:
+#        - x: !dag_tag x
+#          y: !dag_tag y
+#          u: !dag_tag u
+#      tag: data
+#  x: x
+#  y: y
+#  hue: u
+#  cmap:
+#    <<: *cmap

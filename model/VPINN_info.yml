@@ -19,7 +19,7 @@ paths:
   default_cfg: VPINN_cfg.yml
   default_plots: VPINN_plots.yml
   base_plots: VPINN_base_plots.yml
-  py_plots_dir: ../plots
+  py_plots_dir: ../model_plots/VPINN
 
 # -- Metadata
 metadata:

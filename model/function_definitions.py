@@ -25,7 +25,7 @@ Examples = {
                   'f': lambda x: 1},
 
     'Burger': {'u': lambda x: 1.0 / (1 + x[0] ** 2),
-                 'f': lambda x: np.sum(x)},
+               'f': lambda x: np.sum(x)},
 
     'PorousMedium': {'u': lambda x, t: max(t**(-1/3)*(1-1.0/12*x**2*t**(-2/3)), 0),
                      'f': lambda x: 0},

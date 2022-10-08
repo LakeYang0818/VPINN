@@ -1,0 +1,56 @@
+---
+predictions:
+  based_on: line
+  select:
+    prediction:
+      path: VPINN/predictions
+      transform:
+        - .data: [!dag_prev ]
+    solution:
+      path: VPINN/u_exact
+      transform:
+        - .data: [!dag_prev ]
+  transform:
+    - operation: pd.Index
+      args: [ [ 'prediction', 'exact solution' ] ]
+      kwargs:
+        name: 'kind'
+    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
+      tag: data
+  hue: kind
+
+loss:
+  based_on: loss
+  helpers:
+    set_scales:
+      y: log
+
+grid:
+  based_on: grid1d
+
+grid_boundary:
+  based_on: grid_boundary1d
+
+boundary_conditions:
+  based_on: grid_boundary2d
+  select:
+    vals: data/u_exact_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - .isel: [ !dag_tag vals, { variable: 1 } ]
+      kwargs:
+        drop: true
+      tag: dim2
+    - .sel: [ !dag_tag vals, { variable: 'u' } ]
+      kwargs:
+        drop: true
+      tag: u
+    - xr.Dataset:
+      - dim1: !dag_tag dim1
+        dim2: !dag_tag dim2
+        u: !dag_tag u
+      tag: data
+  hue: u
