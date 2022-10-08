@@ -5,12 +5,9 @@ from ..integration import integrate
 """Variational loss for the one-dimensional weak PDE equation"""
 
 
-def Weak1D(u,
-           grid,
-           f_integrated,
-           d1test_func_vals,
-           var_form,
-           weight_function=lambda x: 1):
+def Weak1D(
+    u, grid, f_integrated, d1test_func_vals, var_form, weight_function=lambda x: 1
+):
     """Calculates the variational loss for the weak equation partial_x (u^3) = 1
 
     :param u: the neural network approximation

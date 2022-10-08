@@ -7,17 +7,20 @@ from ..integration import integrate
 
 # TO DO: the second variational form does not work correctly.
 
-def Poisson(u,
-            du,
-            ddu,
-            grid,
-            f_integrated,
-            test_func_vals,
-            d1test_func_vals = None,
-            d2test_func_vals = None,
-            d1test_func_vals_bd = None,
-            var_form = 0,
-            weight_function = lambda x: 1):
+
+def Poisson(
+    u,
+    du,
+    ddu,
+    grid,
+    f_integrated,
+    test_func_vals,
+    d1test_func_vals=None,
+    d2test_func_vals=None,
+    d1test_func_vals_bd=None,
+    var_form=0,
+    weight_function=lambda x: 1,
+):
     """Calculates the variational loss for the Poisson equation.
 
     :param u: the model itself
@@ -41,17 +44,21 @@ def Poisson(u,
 
         laplace = torch.sum(ddu(grid, requires_grad=True), dim=-1, keepdim=True)
 
-        for idx in range(len(f_integrated.coords['tf_idx'])):
+        for idx in range(len(f_integrated.coords["tf_idx"])):
 
-            tf_vals = torch.reshape(torch.from_numpy(test_func_vals.isel(tf_idx=[idx]).data).float(), (-1, 1))
+            tf_vals = torch.reshape(
+                torch.from_numpy(test_func_vals.isel(tf_idx=[idx]).data).float(),
+                (-1, 1),
+            )
 
             loss_v = loss_v + torch.square(
-                integrate(laplace,
-                          tf_vals
-                          ,
-                          domain_density=test_func_vals.attrs['grid_density']
-                ) - torch.from_numpy(f_integrated.isel(tf_idx=idx).data)
-            ) * weight_function(test_func_vals.coords['tf_idx'][idx])
+                integrate(
+                    laplace,
+                    tf_vals,
+                    domain_density=test_func_vals.attrs["grid_density"],
+                )
+                - torch.from_numpy(f_integrated.isel(tf_idx=idx).data)
+            ) * weight_function(test_func_vals.coords["tf_idx"][idx])
 
     elif var_form == 1:
 
@@ -59,7 +66,8 @@ def Poisson(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume) + f_integrated.data[i]
+                integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume)
+                + f_integrated.data[i]
             ) * weight_function(test_func_vals.coords[i])
 
     elif var_form == 2:
@@ -69,9 +77,20 @@ def Poisson(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(u_int, torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True), domain_volume=grid.volume)
-                - integrate(u_bd, torch.sum(torch.mul(d1test_func_vals_bd.data[i], grid.normals), dim=1, keepdim=True),
-                            domain_volume=grid.volume)
+                integrate(
+                    u_int,
+                    torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True),
+                    domain_volume=grid.volume,
+                )
+                - integrate(
+                    u_bd,
+                    torch.sum(
+                        torch.mul(d1test_func_vals_bd.data[i], grid.normals),
+                        dim=1,
+                        keepdim=True,
+                    ),
+                    domain_volume=grid.volume,
+                )
                 - f_integrated.data[i]
             ) * weight_function(test_func_vals.coords[i])
 

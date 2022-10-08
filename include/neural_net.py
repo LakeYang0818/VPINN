@@ -1,7 +1,9 @@
-import torch
-from torch import nn
 from typing import Any, List, Union
+
+import torch
 import xarray as xr
+from torch import nn
+
 # Local imports
 from .Variational_forms import *
 
@@ -10,19 +12,19 @@ def get_activation_funcs(n_layers: int, cfg: Union[str, dict] = None) -> List[An
     """Extracts the activation functions from the config"""
 
     def return_function(name: str):
-        if name in ['Linear', 'linear', 'lin', 'None']:
+        if name in ["Linear", "linear", "lin", "None"]:
             return None
-        elif name in ['sigmoid', 'Sigmoid']:
+        elif name in ["sigmoid", "Sigmoid"]:
             return torch.sigmoid
-        elif name in ['relu', 'ReLU']:
+        elif name in ["relu", "ReLU"]:
             return torch.relu
-        elif name in ['sin', 'sine']:
+        elif name in ["sin", "sine"]:
             return torch.sin
-        elif name in ['cos', 'cosine']:
+        elif name in ["cos", "cosine"]:
             return torch.cos
-        elif name in ['tanh']:
+        elif name in ["tanh"]:
             return torch.tanh
-        elif name in ['abs']:
+        elif name in ["abs"]:
             return torch.abs
         else:
             raise ValueError(f"Unrecognised activation function {name}!")
@@ -51,9 +53,10 @@ def get_activation_funcs(n_layers: int, cfg: Union[str, dict] = None) -> List[An
 # -- Neural net class --------------------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
 
+
 class NeuralNet(nn.Module):
 
-    """ A variational physics-informed neural net. Inherits from the nn.Module parent."""
+    """A variational physics-informed neural net. Inherits from the nn.Module parent."""
 
     VAR_FORMS = {0, 1, 2}
 
@@ -63,39 +66,41 @@ class NeuralNet(nn.Module):
         "Poisson",
         "PorousMedium",
         "Burger",
-        "Weak1D"
+        "Weak1D",
     }
 
     # Torch optimizers
     OPTIMIZERS = {
-        'Adagrad': torch.optim.Adagrad,
-        'Adam': torch.optim.Adam,
-        'AdamW': torch.optim.AdamW,
-        'SparseAdam': torch.optim.SparseAdam,
-        'Adamax': torch.optim.Adamax,
-        'ASGD': torch.optim.ASGD,
-        'LBFGS': torch.optim.LBFGS,
-        'NAdam': torch.optim.NAdam,
-        'RAdam': torch.optim.RAdam,
-        'RMSprop': torch.optim.RMSprop,
-        'Rprop': torch.optim.Rprop,
-        'SGD': torch.optim.SGD,
+        "Adagrad": torch.optim.Adagrad,
+        "Adam": torch.optim.Adam,
+        "AdamW": torch.optim.AdamW,
+        "SparseAdam": torch.optim.SparseAdam,
+        "Adamax": torch.optim.Adamax,
+        "ASGD": torch.optim.ASGD,
+        "LBFGS": torch.optim.LBFGS,
+        "NAdam": torch.optim.NAdam,
+        "RAdam": torch.optim.RAdam,
+        "RMSprop": torch.optim.RMSprop,
+        "Rprop": torch.optim.Rprop,
+        "SGD": torch.optim.SGD,
     }
 
-    def __init__(self,
-                 *,
-                 input_size: int,
-                 output_size: int,
-                 num_layers: int,
-                 nodes_per_layer: int,
-                 activation_funcs: dict = None,
-                 optimizer: str = 'Adam',
-                 learning_rate: float = 0.001,
-                 bias: bool = False,
-                 init_bias: tuple = None,
-                 eq_type: str = 'Poisson',
-                 var_form: int = 1,
-                 pde_constants: dict = None):
+    def __init__(
+        self,
+        *,
+        input_size: int,
+        output_size: int,
+        num_layers: int,
+        nodes_per_layer: int,
+        activation_funcs: dict = None,
+        optimizer: str = "Adam",
+        learning_rate: float = 0.001,
+        bias: bool = False,
+        init_bias: tuple = None,
+        eq_type: str = "Poisson",
+        var_form: int = 1,
+        pde_constants: dict = None,
+    ):
 
         """Initialises the neural net.
         :param input_size: the number of input values
@@ -115,9 +120,11 @@ class NeuralNet(nn.Module):
         """
 
         if var_form not in self.VAR_FORMS:
-            raise ValueError(f"Unrecognized variational_form  "
-                             f"'{var_form}'! "
-                             f"Choose from: [1, 2, 3]")
+            raise ValueError(
+                f"Unrecognized variational_form  "
+                f"'{var_form}'! "
+                f"Choose from: [1, 2, 3]"
+            )
 
         super(NeuralNet, self).__init__()
         self.flatten = nn.Flatten()
@@ -142,10 +149,12 @@ class NeuralNet(nn.Module):
         self.optimizer = self.OPTIMIZERS[optimizer](self.parameters(), lr=learning_rate)
 
         # Initialize the loss tracker dictionary, which can be used to later evaluate the training progress
-        self._loss_tracker: dict = {'iter': [],
-                                    'total_loss': [],
-                                    'loss_b': [],
-                                    'loss_v': []}
+        self._loss_tracker: dict = {
+            "iter": [],
+            "total_loss": [],
+            "loss_b": [],
+            "loss_v": [],
+        }
 
         # Get equation type and variational form
         self._eq_type = eq_type
@@ -168,31 +177,38 @@ class NeuralNet(nn.Module):
     # Computes the first derivative of the model output. x can be a single tensor or a stack of tensors
     def grad(self, x, *, requires_grad: bool = True):
         y = self.forward(x)
-        x = torch.autograd.grad(y, x, grad_outputs=torch.ones_like(y), create_graph=requires_grad)[0]
+        x = torch.autograd.grad(
+            y, x, grad_outputs=torch.ones_like(y), create_graph=requires_grad
+        )[0]
         return x
 
     # Computes the second derivative of the model output. x can be a single tensor or a stack of tensors
     def gradgrad(self, x, *, requires_grad: bool = True):
 
         first_derivative = self.grad(x, requires_grad=True)
-        second_derivative = torch.autograd.grad(first_derivative, x,
-                                                grad_outputs=torch.ones_like(x), create_graph=requires_grad)[0]
+        second_derivative = torch.autograd.grad(
+            first_derivative,
+            x,
+            grad_outputs=torch.ones_like(x),
+            create_graph=requires_grad,
+        )[0]
 
         return second_derivative
 
     # ... Loss functions ...............................................................................................
 
+    def variational_loss(
+        self,
+        grid,
+        f_integrated,
+        test_func_vals,
+        d1test_func_vals=None,
+        d2test_func_vals=None,
+        d1test_func_vals_bd=None,
+        weight_function=lambda x: 1,
+    ) -> torch.Tensor:
 
-    def variational_loss(self,
-                         grid,
-                         f_integrated,
-                         test_func_vals,
-                         d1test_func_vals=None,
-                         d2test_func_vals=None,
-                         d1test_func_vals_bd=None,
-                         weight_function=lambda x: 1) -> torch.Tensor:
-
-        """ Calculates the variational loss on the grid interior.
+        """Calculates the variational loss on the grid interior.
 
         :param grid: the grid
         :param f_integrated: the external function integrated against all test functions
@@ -204,68 +220,80 @@ class NeuralNet(nn.Module):
         :return: the variational loss
         """
 
-        if self._eq_type == 'Burger':
+        if self._eq_type == "Burger":
 
-            return Burger(self.forward,
-                          self.grad,
-                          grid,
-                          f_integrated,
-                          test_func_vals,
-                          d1test_func_vals,
-                          self._var_form,
-                          self._pde_constants)
+            return Burger(
+                self.forward,
+                self.grad,
+                grid,
+                f_integrated,
+                test_func_vals,
+                d1test_func_vals,
+                self._var_form,
+                self._pde_constants,
+            )
 
-        elif self._eq_type == 'Helmholtz':
+        elif self._eq_type == "Helmholtz":
 
-            return Helmholtz(self.forward,
-                             self.grad,
-                             self.gradgrad,
-                             grid,
-                             f_integrated,
-                             test_func_vals,
-                             d1test_func_vals,
-                             d2test_func_vals,
-                             d1test_func_vals_bd,
-                             self._var_form,
-                             self._pde_constants,
-                             weight_function)
+            return Helmholtz(
+                self.forward,
+                self.grad,
+                self.gradgrad,
+                grid,
+                f_integrated,
+                test_func_vals,
+                d1test_func_vals,
+                d2test_func_vals,
+                d1test_func_vals_bd,
+                self._var_form,
+                self._pde_constants,
+                weight_function,
+            )
 
-        elif self._eq_type == 'Poisson':
+        elif self._eq_type == "Poisson":
 
-            return Poisson(self.forward,
-                           self.grad,
-                           self.gradgrad,
-                           grid,
-                           f_integrated,
-                           test_func_vals,
-                           d1test_func_vals,
-                           d2test_func_vals,
-                           d1test_func_vals_bd,
-                           self._var_form,
-                           weight_function)
+            return Poisson(
+                self.forward,
+                self.grad,
+                self.gradgrad,
+                grid,
+                f_integrated,
+                test_func_vals,
+                d1test_func_vals,
+                d2test_func_vals,
+                d1test_func_vals_bd,
+                self._var_form,
+                weight_function,
+            )
 
-        elif self._eq_type == 'PorousMedium':
+        elif self._eq_type == "PorousMedium":
 
-            return PorousMedium(self.forward,
-                                self.grad,
-                                grid,
-                                f_integrated,
-                                test_func_vals,
-                                d1test_func_vals,
-                                d2test_func_vals,
-                                d1test_func_vals_bd,
-                                self._var_form,
-                                self._pde_constants)
+            return PorousMedium(
+                self.forward,
+                self.grad,
+                grid,
+                f_integrated,
+                test_func_vals,
+                d1test_func_vals,
+                d2test_func_vals,
+                d1test_func_vals_bd,
+                self._var_form,
+                self._pde_constants,
+            )
 
-        elif self._eq_type == 'Weak1D':
+        elif self._eq_type == "Weak1D":
 
-            return Weak1D(self.forward,
-                          grid,
-                          f_integrated,
-                          d1test_func_vals,
-                          self._var_form,
-                          weight_function)
+            return Weak1D(
+                self.forward,
+                grid,
+                f_integrated,
+                d1test_func_vals,
+                self._var_form,
+                weight_function,
+            )
 
         else:
-            raise ValueError(f"Unrecognized equation type '{self._eq_type}'! "
-                             f"Choose from: {', '.join(self.EQUATION_TYPES)}")
+            raise ValueError(
+                f"Unrecognized equation type '{self._eq_type}'! "
+                f"Choose from: {', '.join(self.EQUATION_TYPES)}"
+            )

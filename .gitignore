@@ -3,7 +3,5 @@
 .vscode/*
 venv/
 __pycache__/
-Results/*
-!Results/__init__.py
 .ipynb_checkpoints
 .pytest_cache/

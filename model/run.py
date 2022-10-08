@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-import h5py as h5
-import numpy as np
-from os.path import dirname as up
-from paramspace.tools import recursive_update
-import ruamel.yaml as yaml
 import sys
-import torch
 import time
+from os.path import dirname as up
 from typing import Union
-import xarray as xr
 
 import coloredlogs
-from dantro._import_tools import import_module_from_path
+import h5py as h5
+import numpy as np
+import ruamel.yaml as yaml
+import torch
+import xarray as xr
 from dantro import logging
+from dantro._import_tools import import_module_from_path
+from paramspace.tools import recursive_update
 
 sys.path.append(up(__file__))
 sys.path.append(up(up(__file__)))
 
-base = import_module_from_path(mod_path=up(up(__file__)), mod_str='include')
-this = import_module_from_path(mod_path=up(__file__), mod_str='model')
+base = import_module_from_path(mod_path=up(up(__file__)), mod_str="include")
+this = import_module_from_path(mod_path=up(__file__), mod_str="model")
 
 log = logging.getLogger(__name__)
-coloredlogs.install(fmt='%(levelname)s %(message)s', level='INFO', logger=log)
+coloredlogs.install(fmt="%(levelname)s %(message)s", level="INFO", logger=log)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -30,25 +30,24 @@ coloredlogs.install(fmt='%(levelname)s %(message)s', level='INFO', logger=log)
 
 
 class VPINN:
-
     def __init__(
-            self,
-            name: str,
-            *,
-            rng: np.random.Generator,
-            h5group: h5.Group,
-            neural_net: base.NeuralNet,
-            write_every: int = 1,
-            write_start: int = 1,
-            write_time: bool = False,
-            grid: xr.DataArray,
-            training_data: xr.Dataset = None,
-            f_integrated: xr.DataArray,
-            test_func_values: xr.DataArray,
-            d1test_func_values: xr.DataArray = None,
-            d2test_func_values: xr.DataArray = None,
-            d1test_func_values_boundary: xr.DataArray = None,
-            **__,
+        self,
+        name: str,
+        *,
+        rng: np.random.Generator,
+        h5group: h5.Group,
+        neural_net: base.NeuralNet,
+        write_every: int = 1,
+        write_start: int = 1,
+        write_time: bool = False,
+        grid: xr.DataArray,
+        training_data: xr.Dataset = None,
+        f_integrated: xr.DataArray,
+        test_func_values: xr.DataArray,
+        d1test_func_values: xr.DataArray = None,
+        d2test_func_values: xr.DataArray = None,
+        d1test_func_values_boundary: xr.DataArray = None,
+        **__,
     ):
         """Initialize the model instance with a previously constructed RNG and
         HDF5 group to write the output data to.
@@ -95,11 +94,15 @@ class VPINN:
             chunks=True,
             compression=3,
         )
-        self._dset_loss.attrs['dim_names'] = ['time', 'loss type', 'dim_name__3']
+        self._dset_loss.attrs["dim_names"] = ["time", "loss type", "dim_name__3"]
         self._dset_loss.attrs["coords_mode__time"] = "start_and_step"
         self._dset_loss.attrs["coords__time"] = [write_start, write_every]
         self._dset_loss.attrs["coords_mode__loss type"] = "values"
-        self._dset_loss.attrs["coords__loss type"] = ['total loss', 'boundary loss', 'variational loss']
+        self._dset_loss.attrs["coords__loss type"] = [
+            "total loss",
+            "boundary loss",
+            "variational loss",
+        ]
 
         if write_time:
             self.dset_time = self._h5group.create_dataset(
@@ -109,7 +112,7 @@ class VPINN:
                 chunks=True,
                 compression=3,
             )
-            self.dset_time.attrs['dim_names'] = ['epoch', 'training_time']
+            self.dset_time.attrs["dim_names"] = ["epoch", "training_time"]
             self.dset_time.attrs["coords_mode__epoch"] = "trivial"
             self.dset_time.attrs["coords_mode__training_time"] = "trivial"
 
@@ -118,30 +121,45 @@ class VPINN:
         self.write_time = write_time
 
         # The grid interior
-        self.grid: torch.Tensor = torch.reshape(torch.from_numpy(
-            grid.isel({val: slice(1, -1) for val in grid.attrs['space_dimensions']}).to_numpy()
-        ).float(), (-1, grid.attrs['grid_dimension'])).requires_grad_(True)
+        self.grid: torch.Tensor = torch.reshape(
+            torch.from_numpy(
+                grid.isel(
+                    {val: slice(1, -1) for val in grid.attrs["space_dimensions"]}
+                ).to_numpy()
+            ).float(),
+            (-1, grid.attrs["grid_dimension"]),
+        ).requires_grad_(True)
 
         # Training data (boundary conditions)
         self.training_dset: xr.Dataset = training_data
         self.training_coords: torch.Tensor = torch.from_numpy(
-            training_data.sel(variable=grid.attrs['space_dimensions'], drop=True).data.to_numpy()).float()
+            training_data.sel(
+                variable=grid.attrs["space_dimensions"], drop=True
+            ).data.to_numpy()
+        ).float()
         self.training_data: torch.Tensor = torch.from_numpy(
-            training_data.sel(variable=['u'], drop=True).data.to_numpy()).float()
+            training_data.sel(variable=["u"], drop=True).data.to_numpy()
+        ).float()
 
         # Value of the external function integrated against all the test functions
         self.f_integrated: xr.DataArray = f_integrated
 
         # Values of the test functions and their derivatives on the grid interior
         # TODO: transform to tensor here?
-        self.test_func_values: xr.DataArray = test_func_values.isel({var: slice(1, -1) for var in test_func_values.attrs['space_dimensions']})
+        self.test_func_values: xr.DataArray = test_func_values.isel(
+            {var: slice(1, -1) for var in test_func_values.attrs["space_dimensions"]}
+        )
         self.d1test_func_values: Union[None, xr.DataArray] = d1test_func_values
         self.d2test_func_values: Union[None, xr.DataArray] = d2test_func_values
-        self.d1test_func_values_boundary: Union[None, xr.DataArray] = d1test_func_values_boundary
+        self.d1test_func_values_boundary: Union[
+            None, xr.DataArray
+        ] = d1test_func_values_boundary
 
-    def epoch(self, *, boundary_loss_weight: float = 1.0, variational_loss_weight: float = 1.0):
+    def epoch(
+        self, *, boundary_loss_weight: float = 1.0, variational_loss_weight: float = 1.0
+    ):
 
-        """ Trains the model for a single epoch """
+        """Trains the model for a single epoch"""
 
         start_time = time.time()
 
@@ -149,16 +167,23 @@ class VPINN:
         self.neural_net.optimizer.zero_grad()
 
         # Calculate the boundary loss
-        boundary_loss = torch.nn.functional.mse_loss(self.neural_net.forward(self.training_coords), self.training_data)
+        boundary_loss = torch.nn.functional.mse_loss(
+            self.neural_net.forward(self.training_coords), self.training_data
+        )
 
-        variational_loss = self.neural_net.variational_loss(self.grid,
-                                                            self.f_integrated,
-                                                            self.test_func_values,
-                                                            self.d1test_func_values,
-                                                            self.d2test_func_values,
-                                                            self.d1test_func_values_boundary, )
+        variational_loss = self.neural_net.variational_loss(
+            self.grid,
+            self.f_integrated,
+            self.test_func_values,
+            self.d1test_func_values,
+            self.d2test_func_values,
+            self.d1test_func_values_boundary,
+        )
 
-        loss = boundary_loss_weight * boundary_loss + variational_loss_weight * variational_loss
+        loss = (
+            boundary_loss_weight * boundary_loss
+            + variational_loss_weight * variational_loss
+        )
         loss.backward()
 
         # Adjust the model parameters
@@ -187,7 +212,12 @@ class VPINN:
         """
         if self._time >= self._write_start and (self._time % self._write_every == 0):
             self._dset_loss.resize(self._dset_loss.shape[0] + 1, axis=0)
-            self._dset_loss[-1, :] = [[self.current_loss], [self.current_boundary_loss], [self.current_variational_loss]]
+            self._dset_loss[-1, :] = [
+                [self.current_loss],
+                [self.current_boundary_loss],
+                [self.current_variational_loss],
+            ]
+
 
 if __name__ == "__main__":
 
@@ -202,79 +232,114 @@ if __name__ == "__main__":
     model_cfg = cfg[model_name]
 
     # Select the training device and number of threads to use
-    device = model_cfg['Training'].get('device', None)
+    device = model_cfg["Training"].get("device", None)
     if device is None:
-      device = 'mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
-    num_threads = model_cfg['Training'].get('num_threads', None)
+        device = (
+            "mps"
+            if torch.backends.mps.is_available()
+            else "cuda"
+            if torch.cuda.is_available()
+            else "cpu"
+        )
+    num_threads = model_cfg["Training"].get("num_threads", None)
     if num_threads is not None:
-      torch.set_num_threads(num_threads)
-    log.info(f"   Using '{device}' as training device. Number of threads: {torch.get_num_threads()}")
+        torch.set_num_threads(num_threads)
+    log.info(
+        f"   Using '{device}' as training device. Number of threads: {torch.get_num_threads()}"
+    )
 
     # Get the random number generator
     log.note("   Creating global RNG ...")
     rng = np.random.default_rng(cfg["seed"])
-    np.random.seed(cfg['seed'])
-    torch.random.manual_seed(cfg['seed'])
+    np.random.seed(cfg["seed"])
+    torch.random.manual_seed(cfg["seed"])
 
     log.note(f"   Creating output file at:\n        {cfg['output_path']}")
     h5file = h5.File(cfg["output_path"], mode="w")
     h5group = h5file.create_group(model_name)
 
-    eq_type: str = model_cfg['PDE']['type']
-    var_form: int = model_cfg['variational_form']
+    eq_type: str = model_cfg["PDE"]["type"]
+    var_form: int = model_cfg["variational_form"]
 
     # Get PDE constants from the config
-    PDE_constants: dict = {'Burger': model_cfg['PDE']['Burger']['nu'],
-                           'Helmholtz': model_cfg['PDE']['Helmholtz']['k'],
-                           'PorousMedium': model_cfg['PDE']['PorousMedium']['m']}
+    PDE_constants: dict = {
+        "Burger": model_cfg["PDE"]["Burger"]["nu"],
+        "Helmholtz": model_cfg["PDE"]["Helmholtz"]["k"],
+        "PorousMedium": model_cfg["PDE"]["PorousMedium"]["m"],
+    }
 
     # Initialise the neural net
     log.info("   Initializing the neural net ...")
-    net = base.NeuralNet(input_size=len(model_cfg['space']),
-                         output_size=1,
-                         eq_type=eq_type,
-                         var_form=var_form,
-                         pde_constants=PDE_constants,
-                         **model_cfg['NeuralNet']).to(device)
+    net = base.NeuralNet(
+        input_size=len(model_cfg["space"]),
+        output_size=1,
+        eq_type=eq_type,
+        var_form=var_form,
+        pde_constants=PDE_constants,
+        **model_cfg["NeuralNet"],
+    ).to(device)
 
     # Get the data: grid, test function data, and training data. This is loaded from a file,
     # if provided, else synthetically generated
-    data: dict = this.get_data(model_cfg.get('load_from_file', None),
-                               model_cfg['space'],
-                               model_cfg['test_functions'],
-                               solution = this.Examples[model_cfg['PDE']['function']]['u'],
-                               forcing = this.Examples[model_cfg['PDE']['function']]['f'],
-                               var_form = model_cfg['variational_form'],
-                               h5file = h5file)
+    data: dict = this.get_data(
+        model_cfg.get("load_from_file", None),
+        model_cfg["space"],
+        model_cfg["test_functions"],
+        solution=this.Examples[model_cfg["PDE"]["function"]]["u"],
+        forcing=this.Examples[model_cfg["PDE"]["function"]]["f"],
+        var_form=model_cfg["variational_form"],
+        h5file=h5file,
+    )
 
     # Initialise the model
     log.info(f"   Initialising the model '{model_name}' ...")
     model = VPINN(
-        model_name, rng=rng, h5group=h5group, neural_net=net,
-        write_every=cfg['write_every'], write_start=cfg['write_start'],
-        **data
+        model_name,
+        rng=rng,
+        h5group=h5group,
+        neural_net=net,
+        write_every=cfg["write_every"],
+        write_start=cfg["write_start"],
+        **data,
     )
 
     num_epochs = cfg["num_epochs"]
     log.info(f"   Now commencing training for {num_epochs} epochs ...")
     for _ in range(num_epochs):
-        model.epoch(boundary_loss_weight=model_cfg['Training']['boundary_loss_weight'],
-                    variational_loss_weight=model_cfg['Training']['variational_loss_weight'])
+        model.epoch(
+            boundary_loss_weight=model_cfg["Training"]["boundary_loss_weight"],
+            variational_loss_weight=model_cfg["Training"]["variational_loss_weight"],
+        )
 
         if _ % 100 == 0:
-            log.progress(f"   Completed epoch {_} / {num_epochs}; "
-                         f"   current loss: {model.current_loss[0]}")
+            log.progress(
+                f"   Completed epoch {_} / {num_epochs}; "
+                f"   current loss: {model.current_loss[0]}"
+            )
 
     log.info("   Simulation run finished. Generating prediction ...")
 
     # Get the plot grid, which can be finer than the training grid, if specified
-    plot_grid = base.construct_grid(recursive_update(model_cfg['space'], model_cfg.get('predictions_grid', {})))
-    predictions = xr.apply_ufunc(lambda x: model.neural_net.forward(torch.from_numpy(x).float()).detach().numpy(),
-                                 plot_grid, vectorize=True, input_core_dims=[['idx']])
+    plot_grid = base.construct_grid(
+        recursive_update(model_cfg["space"], model_cfg.get("predictions_grid", {}))
+    )
+    predictions = xr.apply_ufunc(
+        lambda x: model.neural_net.forward(torch.from_numpy(x).float())
+        .detach()
+        .numpy(),
+        plot_grid,
+        vectorize=True,
+        input_core_dims=[["idx"]],
+    )
 
-    log.debug('   Evaluating the solution on the grid ...')
-    u_exact = xr.apply_ufunc(this.Examples[model_cfg['PDE']['function']]['u'],
-                             plot_grid, input_core_dims=[['idx']], vectorize=True, keep_attrs=True)
+    log.debug("   Evaluating the solution on the grid ...")
+    u_exact = xr.apply_ufunc(
+        this.Examples[model_cfg["PDE"]["function"]]["u"],
+        plot_grid,
+        input_core_dims=[["idx"]],
+        vectorize=True,
+        keep_attrs=True,
+    )
 
     dset_u_exact = h5group.create_dataset(
         "u_exact",
@@ -283,15 +348,17 @@ if __name__ == "__main__":
         chunks=True,
         compression=3,
     )
-    dset_u_exact.attrs['dim_names'] = list(u_exact.sizes)
+    dset_u_exact.attrs["dim_names"] = list(u_exact.sizes)
 
     # Set attributes
     for idx in list(u_exact.sizes):
-        dset_u_exact.attrs['coords_mode__' + str(idx)] = 'values'
-        dset_u_exact.attrs['coords__' + str(idx)] = u_exact.coords[idx].data
+        dset_u_exact.attrs["coords_mode__" + str(idx)] = "values"
+        dset_u_exact.attrs["coords__" + str(idx)] = u_exact.coords[idx].data
 
     # Write data
-    dset_u_exact[:, ] = u_exact
+    dset_u_exact[
+        :,
+    ] = u_exact
 
     dset_predictions = h5group.create_dataset(
         "predictions",
@@ -300,14 +367,16 @@ if __name__ == "__main__":
         chunks=True,
         compression=3,
     )
-    dset_predictions.attrs['dim_names'] = list(predictions.sizes)
+    dset_predictions.attrs["dim_names"] = list(predictions.sizes)
 
     # Set the attributes
     for idx in list(predictions.sizes):
-        dset_predictions.attrs['coords_mode__' + str(idx)] = 'values'
-        dset_predictions.attrs['coords__' + str(idx)] = plot_grid.coords[idx].data
+        dset_predictions.attrs["coords_mode__" + str(idx)] = "values"
+        dset_predictions.attrs["coords__" + str(idx)] = plot_grid.coords[idx].data
 
-    dset_predictions[:, ] = predictions
+    dset_predictions[
+        :,
+    ] = predictions
 
     log.info("   Done. Wrapping up ...")
     h5file.close()

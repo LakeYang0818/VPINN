@@ -1,8 +1,9 @@
 from functools import partial
-import numpy as np
-from scipy.special import binom, gamma, jacobi, chebyt
 from typing import Any, Sequence, Union
+
+import numpy as np
 import xarray as xr
+from scipy.special import binom, chebyt, gamma, jacobi
 
 """Test functions used in the VPINN model"""
 
@@ -28,10 +29,12 @@ def chebyshev_poly(x: Any, n: int, d: int) -> Any:
             if i == 0:
                 v *= 1.0 / 2
             res += v
-        return 2 ** d * n * res
+        return 2**d * n * res
 
 
-def jacobi_poly(x: Any, n: int, *, d: int, a: int, b: int) -> Union[float, Sequence[float]]:
+def jacobi_poly(
+    x: Any, n: int, *, d: int, a: int, b: int
+) -> Union[float, Sequence[float]]:
 
     """Returns the dth-derivative of the Jacobi polynomial of order n (including for d = 0)"""
 
@@ -40,12 +43,16 @@ def jacobi_poly(x: Any, n: int, *, d: int, a: int, b: int) -> Union[float, Seque
     elif d > n:
         return 0
     else:
-        return gamma(a + b + n + 1 + d) / (2 ** d * gamma(a + b + n + 1)) * jacobi(n - d, a + d, b + d)(x)
+        return (
+            gamma(a + b + n + 1 + d)
+            / (2**d * gamma(a + b + n + 1))
+            * jacobi(n - d, a + d, b + d)(x)
+        )
 
 
 def test_function(x: Any, index: Sequence, *, d: Sequence = None, type: str):
 
-    """ The d-th derivative of the test function, evaluated at a single point.
+    """The d-th derivative of the test function, evaluated at a single point.
 
     :param x: the point at which to evaluate the test function. Test functions are products of 1d test functions.
     :param index: the multiindex of the test function
@@ -56,7 +63,7 @@ def test_function(x: Any, index: Sequence, *, d: Sequence = None, type: str):
 
     def split_derivative_orders(d: Sequence) -> Sequence[Sequence]:
 
-        """ Splits a multiindex of derivatives into a sequence of individual derivative orders, in order to iteratively
+        """Splits a multiindex of derivatives into a sequence of individual derivative orders, in order to iteratively
         calculate partial derivatives of products of test functions.
         Example: [1, 0, 3] -> [[1, 0, 0], [0, 0, 3]]
 
@@ -80,10 +87,14 @@ def test_function(x: Any, index: Sequence, *, d: Sequence = None, type: str):
         dim_res = 1
         for i in range(len(x)):
             if type.lower() == "chebyshev":
-                dim_res *= chebyshev_poly(x[i], index[i] + 1, d=order[i]) - chebyshev_poly(x[i], index[i] - 1)
+                dim_res *= chebyshev_poly(
+                    x[i], index[i] + 1, d=order[i]
+                ) - chebyshev_poly(x[i], index[i] - 1)
 
             elif type.lower() == "legendre":
-                dim_res *= jacobi_poly(x[i], index[i] + 1, a=0, b=0, d=order[i]) - jacobi_poly(x[i], index[i] - 1, a=0, b=0, d=order[i])
+                dim_res *= jacobi_poly(
+                    x[i], index[i] + 1, a=0, b=0, d=order[i]
+                ) - jacobi_poly(x[i], index[i] - 1, a=0, b=0, d=order[i])
 
             elif type.lower() == "sine":
                 if order[i] % 4 == 0:
@@ -99,13 +110,11 @@ def test_function(x: Any, index: Sequence, *, d: Sequence = None, type: str):
     return res
 
 
-def evaluate_test_functions_on_grid(grid: xr.DataArray,
-                                    test_function_indices: xr.DataArray,
-                                    *,
-                                    type: str,
-                                    d: int = 0) -> xr.DataArray:
+def evaluate_test_functions_on_grid(
+    grid: xr.DataArray, test_function_indices: xr.DataArray, *, type: str, d: int = 0
+) -> xr.DataArray:
 
-    """ Evaluates the d-th derivative of the test functions on a grid (d can be 0).
+    """Evaluates the d-th derivative of the test functions on a grid (d can be 0).
 
     :param grid: the grid points on which to evaluate the
     :param test_function_indices: the multi-indices of the test functions to evaluate
@@ -115,27 +124,39 @@ def evaluate_test_functions_on_grid(grid: xr.DataArray,
     """
 
     tf_labels = list(test_function_indices.coords)
-    tf_labels.remove('idx')
+    tf_labels.remove("idx")
 
     res = []
-    for j, idx in enumerate(test_function_indices.data.reshape((-1, grid.attrs['grid_dimension']))):
+    for j, idx in enumerate(
+        test_function_indices.data.reshape((-1, grid.attrs["grid_dimension"]))
+    ):
 
         # Evaluate the test function on all the grid points, expanding the dataset to have the
         # test function indices as additional coordinates
-        ds = xr.apply_ufunc(partial(test_function,
-                                    index=idx,
-                                    type=type,
-                                    d=d * np.ones(grid.attrs['grid_dimension'])),
-                            grid, input_core_dims=[['idx']], dask='allowed', vectorize=True, keep_attrs=True)
+        ds = xr.apply_ufunc(
+            partial(
+                test_function,
+                index=idx,
+                type=type,
+                d=d * np.ones(grid.attrs["grid_dimension"]),
+            ),
+            grid,
+            input_core_dims=[["idx"]],
+            dask="allowed",
+            vectorize=True,
+            keep_attrs=True,
+        )
 
-        ds = ds.expand_dims(dim={tf_labels[i]: [val] for i, val in enumerate(idx)}).stack(dim_name__0=(tf_labels))
+        ds = ds.expand_dims(
+            dim={tf_labels[i]: [val] for i, val in enumerate(idx)}
+        ).stack(dim_name__0=(tf_labels))
 
         res.append(ds)
 
     # Merge the datasets
-    res = xr.concat(res, dim='dim_name__0').unstack()
+    res = xr.concat(res, dim="dim_name__0").unstack()
 
     # Add attributes
-    res.attrs['test_function_dims'] = tf_labels
+    res.attrs["test_function_dims"] = tf_labels
 
     return res

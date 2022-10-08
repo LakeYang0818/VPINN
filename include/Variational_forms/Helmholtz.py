@@ -5,18 +5,20 @@ from ..integration import integrate
 """Variational loss for the Helmholtz equation"""
 
 
-def Helmholtz(u,
-              du,
-              ddu,
-              grid,
-              f_integrated,
-              test_func_vals,
-              d1test_func_vals,
-              d2test_func_vals,
-              d1test_func_vals_bd,
-              var_form,
-              pde_constants,
-              weight_function = lambda x: 1):
+def Helmholtz(
+    u,
+    du,
+    ddu,
+    grid,
+    f_integrated,
+    test_func_vals,
+    d1test_func_vals,
+    d2test_func_vals,
+    d1test_func_vals_bd,
+    var_form,
+    pde_constants,
+    weight_function=lambda x: 1,
+):
     """Calculates the variational loss for the Helmholtz equation.
 
     :param u: the model itself
@@ -37,7 +39,7 @@ def Helmholtz(u,
     # Track the variational loss
     loss_v = torch.tensor(0.0, requires_grad=True)
 
-    k = pde_constants['Helmholtz']
+    k = pde_constants["Helmholtz"]
 
     if var_form == 0:
 
@@ -46,7 +48,10 @@ def Helmholtz(u,
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
                 integrate(laplace, test_func_vals.data[i], domain_volume=grid.volume)
-                + k * integrate(u(grid.interior), test_func_vals.data[i], domain_volume=grid.volume)
+                + k
+                * integrate(
+                    u(grid.interior), test_func_vals.data[i], domain_volume=grid.volume
+                )
                 - f_integrated.data[i]
             ) * weight_function(test_func_vals.coords[i])
 
@@ -56,8 +61,11 @@ def Helmholtz(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                - integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume)
-                + k * integrate(u(grid.interior), test_func_vals.data[i], domain_volume=grid.volume)
+                -integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume)
+                + k
+                * integrate(
+                    u(grid.interior), test_func_vals.data[i], domain_volume=grid.volume
+                )
                 - f_integrated.data[i]
             ) * weight_function(test_func_vals.coords[i])
 
@@ -68,10 +76,24 @@ def Helmholtz(u,
 
         for i in range(f_integrated.size):
             loss_v = loss_v + torch.square(
-                integrate(u_int, torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True), domain_volume=grid.volume)
-                - integrate(u_bd, torch.sum(torch.mul(d1test_func_vals_bd.data[i], grid.normals), dim=1, keepdim=True),
-                            domain_volume=grid.volume)
-                + k * integrate(u(grid.interior), test_func_vals.data[i], domain_volume=grid.volume)
+                integrate(
+                    u_int,
+                    torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True),
+                    domain_volume=grid.volume,
+                )
+                - integrate(
+                    u_bd,
+                    torch.sum(
+                        torch.mul(d1test_func_vals_bd.data[i], grid.normals),
+                        dim=1,
+                        keepdim=True,
+                    ),
+                    domain_volume=grid.volume,
+                )
+                + k
+                * integrate(
+                    u(grid.interior), test_func_vals.data[i], domain_volume=grid.volume
+                )
                 - f_integrated.data[i]
             ) * weight_function(test_func_vals.coords[i])
 
