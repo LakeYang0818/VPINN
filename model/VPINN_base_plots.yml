@@ -26,7 +26,15 @@
     grid.linewidth:     0.5
     savefig.bbox:       tight
     axes.prop_cycle: !format
-      fstr: "cycler('color', ['{colors[lightgreen]:}', '{colors[red]:}', '{colors[darkgreen]:}'])"
+      fstr: "cycler('color', ['{colors[yellow]:}',
+                              '{colors[darkblue]:}',
+                              '{colors[red]:}',
+                              '{colors[skyblue]:}',
+                              '{colors[darkgreen]:}',
+                              '{colors[lightbrown]:}',
+                              '{colors[orange]:}',
+                              '{colors[lightgreen]:}',
+                              '{colors[grey]:}'])"
       colors: *colors
     axes.grid:          True
 #    axes.spines.top:    False
@@ -192,8 +200,6 @@ grid_boundary2d:
   x: dim1
   y: dim2
   hue: n
-  cmap:
-    <<: *normals_cmap
 
 # 3-dimensional grid
 grid3d:

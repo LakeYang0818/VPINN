@@ -9,7 +9,8 @@ space:
 
 # PDE parameters .......................................................................................................
 PDE:
-  type: Tanh
+  type: Poisson
+  function: Tanh
   PorousMedium:
     m: 2
   Helmholtz:
@@ -30,8 +31,10 @@ test_functions:
     dtype: str
     is_any_of: [Legendre, Chebyshev, Sine]
 
-  # Whether to weight the test functions
-  weighting: True
+  # The type of weighting to use
+  weight_function: !param
+    default: exponential
+    is_any_of: [uniform, exponential]
 
 
 # Neural net architecture ..............................................................................................

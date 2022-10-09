@@ -1,4 +1,15 @@
 ---
+.colors: &colors
+  yellow:         &yellow           '#F5DDA9'
+  darkblue:       &darkblue         '#2F7194'
+  red:            &red              '#ec7070'
+  skyblue:        &skyblue          '#97c3d0'
+  darkgreen:      &darkgreen        '#48675A'
+  lightbrown:     &lightbrown       '#C6BFA2'
+  orange:         &orange           '#EC9F7E'
+  lightgreen:     &lightgreen       '#AFD8BC'
+  grey:           &grey             '#3D4244'
+
 predictions:
   based_on: line
   select:
@@ -27,6 +38,7 @@ loss:
 
 grid:
   based_on: grid1d
+  c: *grey
 
 grid_boundary:
   based_on: grid_boundary1d
@@ -54,3 +66,23 @@ boundary_conditions:
         u: !dag_tag u
       tag: data
   hue: u
+
+test_functions:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
+  select:
+    data:
+      path: data/test_function_values
+      transform:
+        - .isel: [!dag_prev , {n_x: !range [5]}]
+  hue: n_x
+  helpers:
+    set_legend:
+      use_legend: False
+
+d1_test_functions:
+  based_on: test_functions
+  select:
+    data:
+      path: data/d1_test_function_values

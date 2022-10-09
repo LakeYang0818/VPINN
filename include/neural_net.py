@@ -200,17 +200,21 @@ class NeuralNet(nn.Module):
     def variational_loss(
         self,
         grid,
+        grid_boundary,
+        normals,
         f_integrated,
         test_func_vals,
+        weights,
         d1test_func_vals=None,
         d2test_func_vals=None,
         d1test_func_vals_bd=None,
-        weight_function=lambda x: 1,
     ) -> torch.Tensor:
 
         """Calculates the variational loss on the grid interior.
 
         :param grid: the grid
+        :param grid_boundary: the grid boundary
+        :param normals: the grid boundary normals
         :param f_integrated: the external function integrated against all test functions
         :param test_func_vals: the test function values on the grid interior
         :param d1test_func_vals: the values of the test function derivatives on the grid interior
@@ -257,13 +261,15 @@ class NeuralNet(nn.Module):
                 self.grad,
                 self.gradgrad,
                 grid,
+                grid_boundary,
+                normals,
                 f_integrated,
                 test_func_vals,
+                weights,
                 d1test_func_vals,
                 d2test_func_vals,
                 d1test_func_vals_bd,
                 self._var_form,
-                weight_function,
             )
 
         elif self._eq_type == "PorousMedium":

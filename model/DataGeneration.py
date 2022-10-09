@@ -82,6 +82,7 @@ def get_data(
         data["boundary"] = boundary
 
         log.debug("   Evaluating test functions on grid ...")
+        # The test functions are defined on
         test_function_indices = base.construct_grid(
             test_func_dict["num_functions"], lower=1, dtype=int
         )
@@ -97,6 +98,17 @@ def get_data(
             grid, test_function_indices, type=test_func_dict["type"], d=1
         )
         data["d1test_func_values"] = d1test_func_values.stack(
+            tf_idx=test_function_values.attrs["test_function_dims"]
+        )
+
+        d1test_func_values_boundary = base.evaluate_test_functions_on_grid(
+            boundary.sel(variable=grid.attrs["space_dimensions"]),
+            test_function_indices,
+            type=test_func_dict["type"],
+            d=1,
+            core_dim="variable",
+        )
+        data["d1test_func_values_boundary"] = d1test_func_values_boundary.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
         )
 

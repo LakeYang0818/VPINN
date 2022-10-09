@@ -47,6 +47,7 @@ class VPINN:
         d1test_func_values: xr.DataArray = None,
         d2test_func_values: xr.DataArray = None,
         d1test_func_values_boundary: xr.DataArray = None,
+        weight_function: callable = lambda x: 1,
         **__,
     ):
         """Initialize the model instance with a previously constructed RNG and
@@ -72,6 +73,7 @@ class VPINN:
               derivatives
             d1test_func_values_boundary (xr.DataArray, optional): dataset containing the values of the test function first
               derivatives evaluated on the boundary
+            weight_function (callable, optional): a function to use to weight the test functions
             **__: other arguments are ignored
         """
         self._name = name
@@ -82,8 +84,8 @@ class VPINN:
         self.neural_net = neural_net
         self.neural_net.optimizer.zero_grad()
         self.current_loss = torch.tensor(0.0)
-        self.current_boundary_loss = torch.tensor(1.0)
-        self.current_boundary_loss = torch.tensor(2.0)
+        self.current_boundary_loss = torch.tensor(0.0)
+        self.current_boundary_loss = torch.tensor(0.0)
 
         # --- Set up chunked dataset to store the state data in --------------------------------------------------------
         # Setup chunked dataset to store the state data in
@@ -130,13 +132,18 @@ class VPINN:
             (-1, grid.attrs["grid_dimension"]),
         ).requires_grad_(True)
 
-        # Training data (boundary conditions)
-        self.training_dset: xr.Dataset = training_data
-        self.training_coords: torch.Tensor = torch.from_numpy(
+        # The grid boundary and normals
+        self.grid_boundary: torch.Tensor = torch.from_numpy(
             training_data.sel(
                 variable=grid.attrs["space_dimensions"], drop=True
             ).data.to_numpy()
         ).float()
+        self.grid_normals: torch.Tensor = torch.from_numpy(
+            training_data.sel(variable=["n"]).data.to_numpy()
+        ).float()
+
+        # Training data (boundary conditions)
+        self.training_dset: xr.Dataset = training_data
         self.training_data: torch.Tensor = torch.from_numpy(
             training_data.sel(variable=["u"], drop=True).data.to_numpy()
         ).float()
@@ -149,11 +156,36 @@ class VPINN:
         self.test_func_values: xr.DataArray = test_func_values.isel(
             {var: slice(1, -1) for var in test_func_values.attrs["space_dimensions"]}
         )
-        self.d1test_func_values: Union[None, xr.DataArray] = d1test_func_values
-        self.d2test_func_values: Union[None, xr.DataArray] = d2test_func_values
+        self.d1test_func_values: Union[None, xr.DataArray] = (
+            d1test_func_values.isel(
+                {
+                    var: slice(1, -1)
+                    for var in test_func_values.attrs["space_dimensions"]
+                }
+            )
+            if d1test_func_values is not None
+            else None
+        )
+        self.d2test_func_values: Union[None, xr.DataArray] = (
+            d2test_func_values.isel(
+                {
+                    var: slice(1, -1)
+                    for var in test_func_values.attrs["space_dimensions"]
+                }
+            )
+            if d2test_func_values is not None
+            else None
+        )
         self.d1test_func_values_boundary: Union[
             None, xr.DataArray
-        ] = d1test_func_values_boundary
+        ] = d1test_func_values_boundary.to_array()
+
+        self.weights = torch.stack(
+            [
+                weight_function(np.array(idx))
+                for idx in test_func_values.coords["tf_idx"].data
+            ]
+        )
 
     def epoch(
         self, *, boundary_loss_weight: float = 1.0, variational_loss_weight: float = 1.0
@@ -168,13 +200,16 @@ class VPINN:
 
         # Calculate the boundary loss
         boundary_loss = torch.nn.functional.mse_loss(
-            self.neural_net.forward(self.training_coords), self.training_data
+            self.neural_net.forward(self.grid_boundary), self.training_data
         )
 
         variational_loss = self.neural_net.variational_loss(
             self.grid,
+            self.grid_boundary,
+            self.grid_normals,
             self.f_integrated,
             self.test_func_values,
+            self.weights,
             self.d1test_func_values,
             self.d2test_func_values,
             self.d1test_func_values_boundary,
@@ -279,14 +314,16 @@ if __name__ == "__main__":
         **model_cfg["NeuralNet"],
     ).to(device)
 
+    test_func_dict = model_cfg["test_functions"]
+
     # Get the data: grid, test function data, and training data. This is loaded from a file,
     # if provided, else synthetically generated
     data: dict = this.get_data(
         model_cfg.get("load_from_file", None),
         model_cfg["space"],
-        model_cfg["test_functions"],
-        solution=this.Examples[model_cfg["PDE"]["function"]]["u"],
-        forcing=this.Examples[model_cfg["PDE"]["function"]]["f"],
+        test_func_dict,
+        solution=this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
+        forcing=this.EXAMPLES[model_cfg["PDE"]["function"]]["f"],
         var_form=model_cfg["variational_form"],
         h5file=h5file,
     )
@@ -301,6 +338,9 @@ if __name__ == "__main__":
         write_every=cfg["write_every"],
         write_start=cfg["write_start"],
         **data,
+        weight_function=this.WEIGHT_FUNCTIONS[
+            test_func_dict["weight_function"].lower()
+        ],
     )
 
     num_epochs = cfg["num_epochs"]
@@ -334,7 +374,7 @@ if __name__ == "__main__":
 
     log.debug("   Evaluating the solution on the grid ...")
     u_exact = xr.apply_ufunc(
-        this.Examples[model_cfg["PDE"]["function"]]["u"],
+        this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
         plot_grid,
         input_core_dims=[["idx"]],
         vectorize=True,

@@ -1,2 +1,2 @@
 from .DataGeneration import *
-from .function_definitions import Examples
+from .function_definitions import EXAMPLES, WEIGHT_FUNCTIONS

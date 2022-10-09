@@ -1,4 +1,15 @@
 ---
+.colors: &colors
+  yellow:         &yellow           '#F5DDA9'
+  darkblue:       &darkblue         '#2F7194'
+  red:            &red              '#ec7070'
+  skyblue:        &skyblue          '#97c3d0'
+  darkgreen:      &darkgreen        '#48675A'
+  lightbrown:     &lightbrown       '#C6BFA2'
+  orange:         &orange           '#EC9F7E'
+  lightgreen:     &lightgreen       '#AFD8BC'
+  grey:           &grey             '#3D4244'
+
 predictions:
   based_on: heatmap
   select:
@@ -43,3 +54,16 @@ boundary_conditions:
         u: !dag_tag u
       tag: data
   hue: u
+  cmap:
+    continuous: true
+    from_values:
+      0: *darkblue
+      0.5: *yellow
+      1: *red
+
+test_functions:
+  based_on: heatmap
+  select:
+    data: data/test_function_values
+  row: n_x
+  col: n_y

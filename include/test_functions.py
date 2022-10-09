@@ -8,10 +8,9 @@ from scipy.special import binom, chebyt, gamma, jacobi
 """Test functions used in the VPINN model"""
 
 
-def chebyshev_poly(x: Any, n: int, d: int) -> Any:
+def chebyshev_poly(x: Any, n: int, *, d: int) -> Any:
 
     """Return the d-th derivative of the nth Chebyshev polynomial of the first kind"""
-
     if d > n:
         return 0
     elif d == 0:
@@ -71,11 +70,11 @@ def test_function(x: Any, index: Sequence, *, d: Sequence = None, type: str):
         :return: the sequenced derivatives
         """
         if np.array_equal(d, 0):
-            return [d]
+            return [int(d)]
         else:
             res = []
             for idx in np.nonzero(d):
-                res.append(np.zeros(len(d)))
+                res.append(np.zeros(len(d), dtype=int))
                 res[-1][idx] = d[idx]
             return res
 
@@ -89,7 +88,7 @@ def test_function(x: Any, index: Sequence, *, d: Sequence = None, type: str):
             if type.lower() == "chebyshev":
                 dim_res *= chebyshev_poly(
                     x[i], index[i] + 1, d=order[i]
-                ) - chebyshev_poly(x[i], index[i] - 1)
+                ) - chebyshev_poly(x[i], index[i] - 1, d=order[i])
 
             elif type.lower() == "legendre":
                 dim_res *= jacobi_poly(
@@ -111,7 +110,12 @@ def test_function(x: Any, index: Sequence, *, d: Sequence = None, type: str):
 
 
 def evaluate_test_functions_on_grid(
-    grid: xr.DataArray, test_function_indices: xr.DataArray, *, type: str, d: int = 0
+    grid: xr.DataArray,
+    test_function_indices: xr.DataArray,
+    *,
+    type: str,
+    d: int = 0,
+    core_dim: str = "idx"
 ) -> xr.DataArray:
 
     """Evaluates the d-th derivative of the test functions on a grid (d can be 0).
@@ -141,7 +145,7 @@ def evaluate_test_functions_on_grid(
                 d=d * np.ones(grid.attrs["grid_dimension"]),
             ),
             grid,
-            input_core_dims=[["idx"]],
+            input_core_dims=[[core_dim]],
             dask="allowed",
             vectorize=True,
             keep_attrs=True,

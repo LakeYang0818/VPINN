@@ -1,17 +1,13 @@
-from typing import Any
-
 import numpy as np
-
-# Function decorator
-# from Utils.utils import adapt_input
+import torch
 
 """The exact solution 'u' and the external forcing 'f' used in the VPINN model.
 Make sure the functions are defined for the dimension of the grid you are trying to evaluate.
 Currently only 1D and 2D grids are supported.
 """
 
-# A dictionary of some examples that we consider, in order to quickly access different equations.
-Examples = {
+# Dictionary of the examples considered
+EXAMPLES = {
     "Tanh": {
         "u": lambda x: 1 * (0.1 * np.sin(4 * np.pi * x) + np.tanh(5 * x)),
         "f": lambda x: -(
@@ -29,7 +25,7 @@ Examples = {
         + k * f(x),
     },
     "CubedRoot": {"u": lambda x: np.sign(x) * np.abs(x) ** (1.0 / 3), "f": lambda x: 1},
-    "Burger": {"u": lambda x: 1.0 / (1 + x[0] ** 2), "f": lambda x: np.sum(x)},
+    "Burger1+1D": {"u": lambda x: 1.0 / (1 + x[0] ** 2), "f": lambda x: 0},
     "PorousMedium": {
         "u": lambda x, t: max(
             t ** (-1 / 3) * (1 - 1.0 / 12 * x**2 * t ** (-2 / 3)), 0
@@ -45,42 +41,8 @@ Examples = {
     },
 }
 
-# # Exact solution
-# @adapt_input
-# def u(x: Any, *, example: str = None) -> float:
-#
-#     example = 'Tanh2D'
-#     # Choose from the given examples
-#     if example is not None:
-#         return Examples[example]['u'](x)
-#
-#     # Define an explicit 1D case
-#     if np.shape(x) <= (1,):
-#         return x
-#
-#     # Define an explicit 2D case
-#     elif len(x) == 2:
-#         return x[0] + x[1]
-#
-#     else:
-#         raise ValueError(f"You have not configured the function 'u' to handle {len(x)}-dimensional inputs!")
-#
-#
-# # External forcing
-# @adapt_input
-# def f(x: Any, *, example: str = None) -> float:
-#     example = 'Tanh2D'
-#     # Choose from the given examples
-#     if example is not None:
-#         return Examples[example]['f'](x)
-#
-#     # Define an explicit 1D case
-#     if np.shape(x) <= (1,):
-#         return x
-#
-#     # Define an explicit 1D case
-#     elif len(x) == 2:
-#         return x[0] + x[1]
-#
-#     else:
-#         raise ValueError(f"You have not configured the function 'f' to handle {len(x)}-dimensional inputs!")
+# Dictionary of weight functions
+WEIGHT_FUNCTIONS = {
+    "uniform": lambda x: torch.tensor(1.0),
+    "exponential": lambda x: torch.tensor(2.0 ** (-1 * np.sum(x))),
+}
