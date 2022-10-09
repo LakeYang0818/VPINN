@@ -66,4 +66,4 @@ test_functions:
   select:
     data: data/test_function_values
   row: n_x
-  col: n_t
+  col: n_y

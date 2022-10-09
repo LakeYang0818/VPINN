@@ -7,20 +7,20 @@ parameter_space:
     space:
       x:
         extent: [-1, 1]
-        size: 9
+        size: 300
       y:
         extent: [0, 2]
-        size: 9
+        size: 300
     PDE:
       function: Burger1+1D
       type: Burger
     test_functions:
-      type: Legendre
+      type: Sine
       num_functions:
         n_x:
-          size: 3
+          size: 2
         n_y:
-          size: 3
+          size: 2
       weight_function: exponential
     NeuralNet:
       activation_funcs:

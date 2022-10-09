@@ -91,6 +91,7 @@ def get_data(
             if boundary_isel is None
             else boundary.isel(base.get_boundary_isel(boundary_isel, grid))
         )
+        log.note("   Constructed the grid.")
 
         # The test functions are only defined on [-1, 1]
         # TODO Generating two grids can be expensive!
@@ -109,23 +110,23 @@ def get_data(
         test_function_indices = base.construct_grid(
             test_func_dict["num_functions"], lower=1, dtype=int
         )
-        test_function_values = base.evaluate_test_functions_on_grid(
+        test_function_values = base.tf_grid_evaluation(
             tf_grid, test_function_indices, type=test_func_dict["type"], d=0
         )
-
+        log.note("   Evaluated the test functions.")
         data["test_func_values"] = test_function_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
         )
 
         log.debug("   Evaluating test function derivatives on grid ... ")
-        d1test_func_values = base.evaluate_test_functions_on_grid(
+        d1test_func_values = base.tf_grid_evaluation(
             tf_grid, test_function_indices, type=test_func_dict["type"], d=1
         )
         data["d1test_func_values"] = d1test_func_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
         )
 
-        d1test_func_values_boundary = base.evaluate_test_functions_on_grid(
+        d1test_func_values_boundary = base.tf_simple_evaluation(
             tf_boundary.sel(variable=tf_grid.attrs["space_dimensions"]),
             test_function_indices,
             type=test_func_dict["type"],
@@ -137,7 +138,7 @@ def get_data(
         )
 
         log.debug("   Evaluating test function second derivatives on grid ... ")
-        d2test_func_values = base.evaluate_test_functions_on_grid(
+        d2test_func_values = base.tf_grid_evaluation(
             tf_grid, test_function_indices, type=test_func_dict["type"], d=2
         )
         data["d2test_func_values"] = d2test_func_values.stack(

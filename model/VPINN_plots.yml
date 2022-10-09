@@ -1,3 +1,14 @@
+.colors: &colors
+  yellow:         &yellow           '#F5DDA9'
+  darkblue:       &darkblue         '#2F7194'
+  red:            &red              '#ec7070'
+  skyblue:        &skyblue          '#97c3d0'
+  darkgreen:      &darkgreen        '#48675A'
+  lightbrown:     &lightbrown       '#C6BFA2'
+  orange:         &orange           '#EC9F7E'
+  lightgreen:     &lightgreen       '#AFD8BC'
+  grey:           &grey             '#3D4244'
+
 # ======================================================================================================================
 #  ╔═╗╦  ╔═╗╔╦╗╔═╗
 #  ╠═╝║  ║ ║ ║ ╚═╗
@@ -9,13 +20,13 @@ loss:
 
 # Plot f evaluated on the grid
 forcing:
-  based_on: plot_function_2d
+  based_on: heatmap
   select:
     data: data/f_evaluated
 
 # Plot the values of f integrated against the test functions
 f_integrated:
-  based_on: plot_function_2d
+  based_on: heatmap
   select:
     data: data/f_integrated
   x: n_x
@@ -31,9 +42,9 @@ f_integrated:
 
 # Plot the exact solution
 u_exact:
-  based_on: plot_function_2d
+  based_on: heatmap
   select:
-    data: data/u_exact
+    data: VPINN/u_exact
 
 u_boundary:
   based_on: grid_boundary2d
@@ -55,19 +66,26 @@ u_boundary:
     - xr.Dataset:
         - dim1: !dag_tag dim1
           dim2: !dag_tag dim2
-          n: !dag_tag n
+          u: !dag_tag n
       tag: data
-  cmap: ~
+  cmap:
+    continuous: true
+    from_values:
+      0: *darkblue
+      0.5: *yellow
+      1: *red
   hue: u
 
 predictions:
-  based_on: line
+  based_on: heatmap
   select:
     data: VPINN/predictions
 
 # Plot the test functions
 test_functions:
   based_on: heatmap
+  select:
+    data: data/test_function_values
   row: n_x
   col: n_y
 
@@ -77,6 +95,7 @@ d1_test_functions:
   select:
     data: data/d1_test_function_values
 
+
 # Plot the second derivative of the test functions
 d2_test_functions:
   based_on: test_functions
@@ -85,8 +104,12 @@ d2_test_functions:
 
 # Plot the grid
 grid:
-  based_on: grid1d
+  based_on: grid2d
 
 # Plot the solution on the boundary
 grid_boundary:
-  based_on: grid_boundary1d
+  based_on: grid_boundary2d
+  cmap:
+    from_values:
+      -1: *darkblue
+      1: *red

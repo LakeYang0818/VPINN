@@ -219,14 +219,18 @@ def get_boundary_isel(selection: Union[str, tuple], grid: xarray.DataArray) -> d
             len_x, len_y = len(grid.coords[grid.attrs["space_dimensions"][0]]), len(
                 grid.coords[grid.attrs["space_dimensions"][1]]
             )
+            l0, l1 = 0, len_x - 1
+            u0, u1 = l1, l1 + len_x - 1
+            le0, le1 = u1, u1 + len_y - 1
+            r0, r1 = le1, None
             if selection == "lower":
-                return dict(idx=(slice(0, len_x - 1)))
+                return dict(idx=slice(l0, l1))
             elif selection == "upper":
-                return dict(idx=(slice(len_x - 1, 2 * (len_x - 1))))
+                return dict(idx=slice(u0, u1))
             elif selection == "left":
-                return dict(idx=(slice(2 * (len_x - 1), 2 * (len_x - 1) + len_y - 1)))
+                return dict(idx=slice(le0, le1))
             elif selection == "right":
-                return dict(idx=(slice(2 * (len_x - 1) + len_y - 1, None)))
+                return dict(idx=slice(r0, r1))
             else:
                 raise ValueError(
                     f"2-dimensional grid has no {selection} boundary! Pass an index range "
@@ -261,42 +265,5 @@ def get_boundary_isel(selection: Union[str, tuple], grid: xarray.DataArray) -> d
                     f"2-dimensional grid has no {selection} boundary! Pass an index range "
                     f"or one of 'left', 'right', 'top', 'bottom'."
                 )
-
     else:
         raise ValueError(f"Unrecognised boundary selection criterion {selection}!")
-
-
-# TODO
-def get_interior():
-    pass
-
-
-# def rescale_grid(grid: Grid, *, new_domain) -> Grid:
-#     """ Rescales a grid to a new domain.
-#
-#     :param grid: the grid to rescale
-#     :param new_domain: the domain to which to scale the grid
-#     :return: the rescaled grid
-#
-#     :raises ValueError: if a grid is being rescaled to a new domain whose dimension does not match the
-#         grid dimension.
-#     """
-#
-#
-#     if grid.dim == 1:
-#         if np.shape(new_domain) != (2,):
-#             raise ValueError(f"Cannot rescale 1d grid to {len(np.shape(new_domain))}-dimensional domain!")
-#
-#         return Grid(x=(new_domain[1] - new_domain[0]) * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) + new_domain[0],
-#                     as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))
-#
-#     elif grid.dim == 2:
-#         if np.shape(new_domain) != (2, 2):
-#             raise ValueError(f"Cannot rescale 2d grid to {len(np.shape(new_domain))}-dimensional domain!")
-#
-#         return Grid(
-#             x=(new_domain[0][1] - new_domain[0][0]) * (grid.x - grid.x[0]) / (grid.x[-1] - grid.x[0]) + new_domain[0][
-#                 0],
-#             y=(new_domain[1][1] - new_domain[1][0]) * (grid.y - grid.y[0]) / (grid.y[-1] - grid.y[0]) + new_domain[1][
-#                 0],
-#             as_tensor=grid.is_tensor, dtype=grid.dtype, requires_grad=grid.requires_grad, requires_normals=(grid.normals is not None))

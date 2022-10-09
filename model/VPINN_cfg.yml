@@ -6,11 +6,14 @@ space:
   x:
     extent: [-1, 1]
     size: 20
+  y:
+    extent: [-1, 1]
+    size: 20
 
 # PDE parameters .......................................................................................................
 PDE:
   type: Poisson
-  function: Tanh
+  function: SinSin2D
   PorousMedium:
     m: 2
   Helmholtz:
@@ -19,15 +22,17 @@ PDE:
     nu: 0
 
 # The variational form to use; can be 0, 1, or 2
-variational_form: 0
+variational_form: 1
 
 # Test function settings ...............................................................................................
 test_functions:
   num_functions:
     n_x:
-      size: 3
+      size: 2
+    n_y:
+      size: 2
   type: !param
-    default: Legendre
+    default: Lege
     dtype: str
     is_any_of: [Legendre, Chebyshev, Sine]
 
