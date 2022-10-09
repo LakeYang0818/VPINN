@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import time
+from itertools import chain
 from os.path import dirname as up
 from typing import Union
 
@@ -37,6 +38,7 @@ class VPINN:
         rng: np.random.Generator,
         h5group: h5.Group,
         neural_net: base.NeuralNet,
+        device: str,
         write_every: int = 1,
         write_start: int = 1,
         write_time: bool = False,
@@ -58,6 +60,7 @@ class VPINN:
             rng (np.random.Generator): The shared RNG
             h5group (h5.Group): The output file group to write data to
             neural_net: The neural network
+            device: the device to use
             write_every: write every iteration
             write_start: iteration at which to start writing
             write_time: whether to write out the training time into a dataset
@@ -123,30 +126,45 @@ class VPINN:
         self.write_time = write_time
 
         # The grid interior
-        self.grid: torch.Tensor = torch.reshape(
-            torch.from_numpy(
-                grid.isel(
-                    {val: slice(1, -1) for val in grid.attrs["space_dimensions"]}
-                ).to_numpy()
-            ).float(),
-            (-1, grid.attrs["grid_dimension"]),
-        ).requires_grad_(True)
+        self.grid: torch.Tensor = (
+            torch.reshape(
+                torch.from_numpy(
+                    grid.isel(
+                        {val: slice(1, -1) for val in grid.attrs["space_dimensions"]}
+                    ).to_numpy()
+                ).float(),
+                (-1, grid.attrs["grid_dimension"]),
+            )
+            .requires_grad_(True)
+            .to(device)
+        )
 
-        # The grid boundary and normals
-        self.grid_boundary: torch.Tensor = torch.from_numpy(
-            training_data.sel(
-                variable=grid.attrs["space_dimensions"], drop=True
-            ).data.to_numpy()
-        ).float()
-        self.grid_normals: torch.Tensor = torch.from_numpy(
-            training_data.sel(variable=["n"]).data.to_numpy()
-        ).float()
+        # The grid boundary
+        self.grid_boundary: torch.Tensor = (
+            torch.from_numpy(
+                training_data.sel(
+                    variable=grid.attrs["space_dimensions"], drop=True
+                ).data.to_numpy()
+            )
+            .float()
+            .to(device)
+        )
+
+        # The grid normals
+        self.grid_normals: torch.Tensor = (
+            torch.from_numpy(training_data.sel(variable=["n"]).data.to_numpy())
+            .float()
+            .to(device)
+        )
 
         # Training data (boundary conditions)
-        self.training_dset: xr.Dataset = training_data
-        self.training_data: torch.Tensor = torch.from_numpy(
-            training_data.sel(variable=["u"], drop=True).data.to_numpy()
-        ).float()
+        self.training_data: torch.Tensor = (
+            torch.from_numpy(
+                training_data.sel(variable=["u"], drop=True).data.to_numpy()
+            )
+            .float()
+            .to(device)
+        )
 
         # Value of the external function integrated against all the test functions
         self.f_integrated: xr.DataArray = f_integrated
@@ -325,6 +343,7 @@ if __name__ == "__main__":
         solution=this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
         forcing=this.EXAMPLES[model_cfg["PDE"]["function"]]["f"],
         var_form=model_cfg["variational_form"],
+        boundary_isel=model_cfg["Training"].get("boundary", None),
         h5file=h5file,
     )
 
@@ -335,12 +354,13 @@ if __name__ == "__main__":
         rng=rng,
         h5group=h5group,
         neural_net=net,
+        device=device,
         write_every=cfg["write_every"],
         write_start=cfg["write_start"],
-        **data,
         weight_function=this.WEIGHT_FUNCTIONS[
             test_func_dict["weight_function"].lower()
         ],
+        **data,
     )
 
     num_epochs = cfg["num_epochs"]
@@ -363,6 +383,7 @@ if __name__ == "__main__":
     plot_grid = base.construct_grid(
         recursive_update(model_cfg["space"], model_cfg.get("predictions_grid", {}))
     )
+
     predictions = xr.apply_ufunc(
         lambda x: model.neural_net.forward(torch.from_numpy(x).float())
         .detach()

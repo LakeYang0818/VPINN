@@ -1,8 +1,11 @@
+import copy
 import logging
 import sys
 from os.path import dirname as up
+from typing import Union
 
 import h5py as h5
+import paramspace
 import xarray as xr
 from dantro._import_tools import import_module_from_path
 
@@ -26,6 +29,7 @@ def get_data(
     solution: callable,
     forcing: callable,
     var_form: int,
+    boundary_isel: Union[str, tuple] = None,
     h5file: h5.File,
 ) -> dict:
 
@@ -38,6 +42,8 @@ def get_data(
     :param solution: the explicit solution (to be evaluated on the grid boundary)
     :param forcing: the external function
     :param var_form: the variational form to use
+    :param boundary_isel: (optional) section of the boundary to use for training. Can either be a string ('lower',
+        'upper', 'left', 'right') or a range.
     :param h5file: the h5file to write data to
     :return: data: a dictionary containing the grid and test function data
     """
@@ -80,29 +86,47 @@ def get_data(
         boundary: xr.Dataset = base.get_boundary(grid)
         data["grid"] = grid
         data["boundary"] = boundary
+        training_boundary = (
+            boundary
+            if boundary_isel is None
+            else boundary.isel(base.get_boundary_isel(boundary_isel, grid))
+        )
+
+        # The test functions are only defined on [-1, 1]
+        # TODO Generating two grids can be expensive!
+        tf_space_dict = paramspace.tools.recursive_replace(
+            copy.deepcopy(space_dict),
+            select_func=lambda d: "extent" in d,
+            replace_func=lambda d: d.update(dict(extent=[-1, 1])) or d,
+        )
+
+        tf_grid: xr.DataArray = base.construct_grid(tf_space_dict)
+        tf_boundary: xr.Dataset = base.get_boundary(tf_grid)
 
         log.debug("   Evaluating test functions on grid ...")
         # The test functions are defined on
+        # TODO the test functions only need to be caluclated on the coordinates
         test_function_indices = base.construct_grid(
             test_func_dict["num_functions"], lower=1, dtype=int
         )
         test_function_values = base.evaluate_test_functions_on_grid(
-            grid, test_function_indices, type=test_func_dict["type"], d=0
+            tf_grid, test_function_indices, type=test_func_dict["type"], d=0
         )
+
         data["test_func_values"] = test_function_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
         )
 
         log.debug("   Evaluating test function derivatives on grid ... ")
         d1test_func_values = base.evaluate_test_functions_on_grid(
-            grid, test_function_indices, type=test_func_dict["type"], d=1
+            tf_grid, test_function_indices, type=test_func_dict["type"], d=1
         )
         data["d1test_func_values"] = d1test_func_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
         )
 
         d1test_func_values_boundary = base.evaluate_test_functions_on_grid(
-            boundary.sel(variable=grid.attrs["space_dimensions"]),
+            tf_boundary.sel(variable=tf_grid.attrs["space_dimensions"]),
             test_function_indices,
             type=test_func_dict["type"],
             d=1,
@@ -114,7 +138,7 @@ def get_data(
 
         log.debug("   Evaluating test function second derivatives on grid ... ")
         d2test_func_values = base.evaluate_test_functions_on_grid(
-            grid, test_function_indices, type=test_func_dict["type"], d=2
+            tf_grid, test_function_indices, type=test_func_dict["type"], d=2
         )
         data["d2test_func_values"] = d2test_func_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
@@ -135,10 +159,10 @@ def get_data(
         log.debug("   Evaluating the solution on the boundary ...")
         u_boundary: xr.Dataset = xr.concat(
             [
-                boundary,
+                training_boundary,
                 xr.apply_ufunc(
                     solution,
-                    boundary.sel(variable=grid.attrs["space_dimensions"]),
+                    training_boundary.sel(variable=grid.attrs["space_dimensions"]),
                     input_core_dims=[["variable"]],
                     vectorize=True,
                 ).assign_coords(variable=("variable", ["u"])),

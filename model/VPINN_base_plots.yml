@@ -247,31 +247,31 @@ grid_boundary3d:
     - .isel: [ !dag_prev , { variable: 0 } ]
       kwargs:
         drop: true
-      tag: x
+      tag: dim1
     - .isel: [ !dag_tag vals, { variable: 1 } ]
       kwargs:
         drop: true
-      tag: y
+      tag: dim2
     - .isel: [ !dag_tag vals, { variable: 2 } ]
       kwargs:
         drop: true
-      tag: z
+      tag: dim3
     - .isel: [ !dag_tag vals, { variable: -1 } ]
       kwargs:
         drop: true
       tag: n
     - xr.Dataset:
-        - x: !dag_tag x
-          y: !dag_tag y
-          z: !dag_tag z
+        - x: !dag_tag dim1
+          y: !dag_tag dim2
+          z: !dag_tag dim3
           n: !dag_tag n
       tag: data
-  x: x
-  y: y
-  z: z
+  x: dim1
+  y: dim2
+  z: dim3
   hue: n
-  cmap:
-    <<: *normals_cmap
+#  cmap:
+#    <<: *normals_cmap
 
 # ======================================================================================================================
 #  ╔═╗╦═╗╔═╗╔╦╗╦╔═╗╔╦╗╦╔═╗╔╗╔╔═╗

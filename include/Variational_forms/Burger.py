@@ -16,33 +16,39 @@ def Burger(
 
     if var_form == 1:
 
-        u = u(grid.interior)
+        u = u(grid)
         u_vec = torch.reshape(
             torch.stack([0.5 * torch.pow(u, 2), u], dim=1), (len(u), 2)
         )
-        du_x = (
-            torch.swapaxes(du(grid.interior, requires_grad=True), 0, 1)[0]
-            if nu != 0
-            else None
-        )
+        du_x = torch.swapaxes(du(u, requires_grad=True), 0, 1)[0] if nu != 0 else None
 
-        for i in range(f_integrated.size):
+        for idx in range(len(f_integrated.coords["tf_idx"])):
+
+            tf_vals = torch.reshape(
+                torch.from_numpy(d1test_func_vals.isel(tf_idx=[idx]).data).float(),
+                (-1, 1),
+            )
+
             if nu != 0:
                 loss_v = loss_v + torch.square(
                     integrate(
-                        u_vec, d1test_func_vals.data[i], domain_volume=grid.volume
+                        u_vec,
+                        tf_vals,
+                        domain_density=test_func_vals.attrs["grid_density"],
                     )
                     - nu
                     * integrate(
                         du_x,
-                        torch.transpose(d1test_func_vals.data[i], 0, 1)[0],
-                        domain_volume=grid.volume,
+                        torch.transpose(tf_vals, 0, 1)[0],
+                        domain_density=test_func_vals.attrs["grid_density"],
                     )
                 )
             else:
                 loss_v = loss_v + torch.square(
                     integrate(
-                        u_vec, d1test_func_vals.data[i], domain_volume=grid.volume
+                        u_vec,
+                        tf_vals,
+                        domain_density=test_func_vals.attrs["grid_density"],
                     )
                 )
 

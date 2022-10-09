@@ -120,6 +120,7 @@ def evaluate_test_functions_on_grid(
 
     """Evaluates the d-th derivative of the test functions on a grid (d can be 0).
 
+    # TODO : test functions only need to be evaluated on the coordinates, and can be zipped together using np.meshgrid
     :param grid: the grid points on which to evaluate the
     :param test_function_indices: the multi-indices of the test functions to evaluate
     :param type: the type of test function to use

@@ -1,0 +1,69 @@
+---
+.colors: &colors
+  yellow:         &yellow           '#F5DDA9'
+  darkblue:       &darkblue         '#2F7194'
+  red:            &red              '#ec7070'
+  skyblue:        &skyblue          '#97c3d0'
+  darkgreen:      &darkgreen        '#48675A'
+  lightbrown:     &lightbrown       '#C6BFA2'
+  orange:         &orange           '#EC9F7E'
+  lightgreen:     &lightgreen       '#AFD8BC'
+  grey:           &grey             '#3D4244'
+
+predictions:
+  based_on: heatmap
+  select:
+    data: VPINN/predictions
+
+solution:
+  based_on: heatmap
+  select:
+    data: VPINN/u_exact
+loss:
+  based_on: loss
+  helpers:
+    set_scales:
+      y: log
+
+grid:
+  based_on: grid3d
+
+grid_boundary:
+  based_on: grid_boundary2d
+
+boundary_conditions:
+  based_on: grid_boundary2d
+  select:
+    vals: data/u_exact_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - .isel: [ !dag_tag vals, { variable: 1 } ]
+      kwargs:
+        drop: true
+      tag: dim2
+    - .sel: [ !dag_tag vals, { variable: 'u' } ]
+      kwargs:
+        drop: true
+      tag: u
+    - xr.Dataset:
+      - dim1: !dag_tag dim1
+        dim2: !dag_tag dim2
+        u: !dag_tag u
+      tag: data
+  hue: u
+#  cmap:
+#    continuous: true
+#    from_values:
+#      0: *darkblue
+#      0.5: *yellow
+#      1: *red
+
+test_functions:
+  based_on: heatmap
+  select:
+    data: data/test_function_values
+  row: n_x
+  col: n_t
