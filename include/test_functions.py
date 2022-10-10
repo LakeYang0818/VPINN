@@ -99,16 +99,14 @@ def test_function_vec(x: Any, index: Sequence, *, d: Sequence = None, type: str)
 
     d = split_derivative_orders(d)
 
-    return np.sum(
+    return np.array(
         [
-            [
-                np.prod(
-                    [
-                        test_function_1d(x[i], index[i], d=order[i], type=type)
-                        for i in range(len(x))
-                    ]
-                )
-            ]
+            np.prod(
+                [
+                    test_function_1d(x[i], index[i], d=order[i], type=type)
+                    for i in range(len(x))
+                ]
+            )
             for order in d
         ]
     )
@@ -141,13 +139,13 @@ def split_derivative_orders(d: Sequence) -> Sequence[Sequence]:
 
 
 def tf_grid_evaluation(
-    grid: xr.DataArray,
+    grid: Union[xr.DataArray, xr.Dataset],
     test_function_indices: xr.DataArray,
     *,
     type: str,
     d: int = 0,
     core_dim: str = "idx"
-) -> xr.DataArray:
+):
     """Efficient evaluation of the test functions on a grid. For high dimensional grids, it is
        sufficient to evaluate the test functions on the grid axes and then combine the test
        function values together, thereby significantly reducing the computational cost. This is necessary as the
@@ -164,14 +162,14 @@ def tf_grid_evaluation(
     """
 
     def _efficient_evaluation(
-        grid: xr.DataArray,
+        grid: Union[xr.DataArray, xr.Dataset],
         index: Union[int, Sequence],
         *,
         dim: int = 1,
         d: int = 0,
         type: str,
         core_dim: str = None
-    ) -> xr.DataArray:
+    ):
 
         """Evaluation routine for a single test function multi-index on a grid.
 
@@ -276,17 +274,21 @@ def tf_grid_evaluation(
     # Add attributes
     res.attrs["test_function_dims"] = tf_labels
 
+    # Reorder dimensions to ensure calling .data returns correct shape
+    for idx in tf_labels:
+        res = res.transpose(idx, ...)
+
     return res
 
 
 def tf_simple_evaluation(
-    grid: xr.DataArray,
+    grid: Union[xr.DataArray, xr.Dataset],
     test_function_indices: xr.DataArray,
     *,
     type: str,
     d: int = 0,
     core_dim: str = "idx"
-) -> xr.DataArray:
+):
     """Naive evaluation of the test functions on a grid. The test functions are simply applied to
        each grid point. This can be used for instance to evaluate the test functions on the boundary of a grid.
        The derivative order can be 0.
@@ -295,6 +297,8 @@ def tf_simple_evaluation(
     :param test_function_indices: the multi-indices of the test functions to evaluate
     :param type: the type of test function to use
     :param d: (optional) the order of the derivative (can be zero)
+    :param core_dim (optional) the dimension over which to vectorise the operation. Typically, this is the coordinate
+        index.
     :return: an xarray.DataArray of the test function values on the grid, indexed by the test function index and the
     grid coordinates.
     """
@@ -306,6 +310,10 @@ def tf_simple_evaluation(
     for j, idx in enumerate(
         test_function_indices.data.reshape((-1, grid.attrs["grid_dimension"]))
     ):
+        # tf_res = [test_function_vec(pt, index=idx, d=d * np.ones(grid.attrs["grid_dimension"]),
+        #                             type=type) for pt in grid.data]
+        # ds = xr.Data
+        # print(tf_res)
         # Evaluate the test function on all the grid points, expanding the dataset to have the
         # test function indices as additional coordinates
         ds = xr.apply_ufunc(
@@ -317,9 +325,10 @@ def tf_simple_evaluation(
             ),
             grid,
             input_core_dims=[[core_dim]],
-            dask="allowed",
+            dask="parallelized",
             vectorize=True,
             keep_attrs=True,
+            output_core_dims=[["coords"]],
         )
 
         ds = ds.expand_dims(
@@ -333,5 +342,9 @@ def tf_simple_evaluation(
 
     # Add attributes
     res.attrs["test_function_dims"] = tf_labels
+
+    # Transpose the Dataset to ensure calling .data later returns correct shape
+    for idx in tf_labels:
+        res = res.transpose(idx, ...)
 
     return res

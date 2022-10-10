@@ -48,87 +48,58 @@ def Poisson(
 
         laplace = torch.sum(ddu(grid, requires_grad=True), dim=-1, keepdim=True)
 
-        # Integrate the Laplacian against all the test functions
-        integrals = torch.stack(
-            [
-                integrate(
-                    laplace,
-                    test_func_vals[_],
-                    domain_density=grid_density,
-                )
-                for _ in range(len(test_func_vals))
-            ]
-        )
+        for _ in range(len(f_integrated)):
 
-        # Multiply each integral with the weight accorded each test function and calculate the mean squared error
-        loss_v = loss_v + torch.nn.functional.mse_loss(
-            integrals * tf_weights, f_integrated * tf_weights
-        )
+            # Integrate the Laplacian against all the test functions
+            integral = integrate(
+                laplace,
+                test_func_vals[_],
+                domain_density=grid_density,
+            )
+
+            loss_v = loss_v + torch.square(integral - f_integrated[_]) * tf_weights[_]
 
     elif variational_form == 1:
 
         grad = du(grid, requires_grad=True)
 
-        # Integrate the gradient against all the test functions
-        integrals = torch.stack(
-            [
-                integrate(
-                    grad,
-                    d1test_func_vals[_],
-                    domain_density=grid_density,
-                )
-                for _ in range(len(d1test_func_vals))
-            ]
-        )
+        for _ in range(len(f_integrated)):
 
-        # Multiply each integral with the weight accorded each test function and calculate the mean squared error
-        # For the first variational form, there is a sign flip in the equation
-        loss_v = loss_v + torch.nn.functional.mse_loss(
-            integrals * tf_weights, -1 * f_integrated * tf_weights
-        )
+            # Integrate the Jacobian against all test functions
+            integral = integrate(
+                grad,
+                d1test_func_vals[_],
+                domain_density=grid_density,
+            )
+            loss_v = loss_v + torch.square(integral + f_integrated[_]) * tf_weights[_]
 
     elif variational_form == 2:
 
         u_bd = u(grid_boundary)
         u_int = u(grid)
 
-        for idx in range(len(f_integrated.coords["tf_idx"])):
+        for _ in range(len(f_integrated)):
 
-            tf_vals = torch.sum(
-                torch.reshape(
-                    torch.from_numpy(d2test_func_vals.isel(tf_idx=[idx]).data).float(),
-                    (-1, 1),
-                ),
-                dim=1,
-                keepdim=True,
+            loss_v = (
+                loss_v
+                + torch.square(
+                    integrate(
+                        u_int,
+                        torch.sum(d2test_func_vals[_], dim=1, keepdim=True),
+                        domain_density=grid_density,
+                    )
+                    - integrate(
+                        u_bd,
+                        torch.sum(
+                            torch.mul(d1test_func_vals_bd[_], normals),
+                            dim=1,
+                            keepdim=True,
+                        ),
+                        domain_density=grid_density,
+                    )
+                    - f_integrated[_]
+                )
+                * tf_weights[_]
             )
 
-            tf_vals_bd = torch.mul(
-                torch.reshape(
-                    torch.from_numpy(
-                        d1test_func_vals_bd.isel(tf_idx=[idx]).data
-                    ).float(),
-                    (-1, 1),
-                ),
-                normals,
-            )
-
-            loss_v = loss_v + torch.square(
-                integrate(
-                    u_int,
-                    tf_vals,
-                    domain_density=test_func_vals.attrs["grid_density"],
-                )
-                - integrate(
-                    u_bd,
-                    torch.sum(
-                        tf_vals_bd,
-                        dim=1,
-                        keepdim=True,
-                    ),
-                    domain_density=test_func_vals.attrs["grid_density"],
-                )
-                - f_integrated.data[idx]
-            ) * (weights[idx] ** 2)
-
-    return loss_v
+    return loss_v / len(tf_weights)

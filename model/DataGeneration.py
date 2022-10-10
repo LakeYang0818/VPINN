@@ -137,7 +137,7 @@ def get_data(
         )
         data["d1test_func_values_boundary"] = d1test_func_values_boundary.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
-        )
+        ).transpose("tf_idx", ...)
 
         log.debug("   Evaluating test function second derivatives on grid ... ")
         d2test_func_values = base.tf_grid_evaluation(

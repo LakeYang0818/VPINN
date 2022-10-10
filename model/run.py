@@ -80,7 +80,8 @@ class VPINN:
 
         def _tf_to_tensor(test_funcs: xr.DataArray) -> Union[None, torch.Tensor]:
 
-            """Unpacks a DataArray of test function values and returns a stacked torch.Tensor"""
+            """Unpacks a DataArray of test function values and returns a stacked torch.Tensor. Shape of the
+            output is given by: [test function multi-index, coordinate-multi-index, 1]"""
 
             if test_funcs is None:
                 return None
@@ -97,7 +98,9 @@ class VPINN:
                 (len(test_funcs.coords["tf_idx"]), -1, 1),
             ).float()
 
-        def _dtf_to_tensor(test_funcs: xr.DataArray) -> Union[None, torch.Tensor]:
+        def _dtf_to_tensor(
+            test_funcs: xr.DataArray = None,
+        ) -> Union[None, torch.Tensor]:
 
             """Unpacks a DataArray of test function derivatives and returns a stacked torch.Tensor"""
 
@@ -119,6 +122,27 @@ class VPINN:
                     test_funcs.attrs["grid_dimension"],
                 ),
             ).float()
+
+        def _get_normals(ds: xr.Dataset = None) -> Union[None, torch.Tensor]:
+
+            """Unpacks the Dataset containing the grid normals and returns a stacked torch.Tensor"""
+
+            if ds is None:
+                return None
+
+            res = []
+            for dim in ds.attrs["space_dimensions"]:
+                res.append(
+                    torch.from_numpy(
+                        training_data.sel(
+                            variable=["normals_" + str(dim)], drop=True
+                        ).data.to_numpy()
+                    ).float()
+                )
+
+            return torch.reshape(
+                torch.stack(res, dim=1), (-1, ds.attrs["grid_dimension"])
+            )
 
         self._name = name
         self._time = 0
@@ -190,11 +214,7 @@ class VPINN:
         )
 
         # The grid normals
-        self.grid_normals: torch.Tensor = (
-            torch.from_numpy(training_data.sel(variable=["n"]).data.to_numpy())
-            .float()
-            .to(device)
-        )
+        self.grid_normals: torch.Tensor = _get_normals(training_data).to(device)
 
         # The density of the grid
         self.domain_density = grid.attrs["grid_density"]
@@ -223,9 +243,10 @@ class VPINN:
         self.d2test_func_values: Union[None, xr.DataArray] = _dtf_to_tensor(
             d2test_func_values
         )
-        self.d1test_func_values_boundary: Union[
-            None, xr.DataArray
-        ] = d1test_func_values_boundary.to_array()
+
+        self.d1test_func_values_boundary: torch.Tensor = torch.from_numpy(
+            d1test_func_values_boundary.to_array().squeeze().data
+        ).float()
 
         self.weights = torch.stack(
             [
