@@ -18,7 +18,7 @@ PDE:
   function: !param
     default: Tanh
     dtype: str
-    is_any_of: [Tanh, Tanh2D, Burger1+1D, DoubleGauss1D, CubedRoot, PorousMedium]
+    is_any_of: [Tanh, Tanh2D, SinSin2D, Burger1+1D, DoubleGauss1D, CubedRoot, PorousMedium]
   PorousMedium:
     m: 2
   Helmholtz:

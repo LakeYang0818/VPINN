@@ -67,3 +67,64 @@ test_functions:
     data: data/test_function_values
   row: n_x
   col: n_y
+
+# Plot the first x-derivatives of the test functions
+d1test_functions_x:
+  based_on: heatmap
+  select:
+    data:
+      path: data/d1_test_function_values
+      transform:
+        - .sel: [!dag_prev , {'idx': 0}]
+  row: n_x
+  col: n_y
+  cbar_kwargs:
+    label: $\partial_x \nu_{kl}$
+
+# Plot the first y-derivatives of the test functions
+d1test_functions_y:
+  based_on: heatmap
+  select:
+    data:
+      path: data/d1_test_function_values
+      transform:
+        - .sel: [!dag_prev , {'idx': 1}]
+  row: n_x
+  col: n_y
+  cbar_kwargs:
+    label: $\partial_y \nu_{kl}$
+
+# Plot the norm of the gradient of the test functions
+d1test_functions_norm:
+  based_on: heatmap
+  select:
+    data:
+      path: data/d1_test_function_values
+      transform:
+        - squared: [ !dag_prev ,  ]
+        - .sum: [!dag_prev , 'idx']
+  row: n_x
+  col: n_y
+  cmap:
+    continuous: true
+    from_values:
+      0: *red
+      0.5: *darkblue
+      1: *yellow
+  cbar_kwargs:
+    label: $\Vert \nabla \nu_{kl} \Vert_2$
+
+f_integrated:
+  based_on: heatmap
+  select:
+    data: data/f_integrated
+  x: n_x
+  y: n_y
+  helpers:
+    set_tick_locators:
+      x: &formatting
+        major:
+          name: MaxNLocator
+          integer: true
+      y:
+        <<: *formatting

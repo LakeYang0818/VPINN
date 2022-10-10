@@ -77,6 +77,49 @@ class VPINN:
             weight_function (callable, optional): a function to use to weight the test functions
             **__: other arguments are ignored
         """
+
+        def _tf_to_tensor(test_funcs: xr.DataArray) -> Union[None, torch.Tensor]:
+
+            """Unpacks a DataArray of test function values and returns a stacked torch.Tensor"""
+
+            if test_funcs is None:
+                return None
+
+            return torch.reshape(
+                torch.from_numpy(
+                    test_funcs.isel(
+                        {
+                            var: slice(1, -1)
+                            for var in test_funcs.attrs["space_dimensions"]
+                        }
+                    ).data
+                ),
+                (len(test_funcs.coords["tf_idx"]), -1, 1),
+            ).float()
+
+        def _dtf_to_tensor(test_funcs: xr.DataArray) -> Union[None, torch.Tensor]:
+
+            """Unpacks a DataArray of test function derivatives and returns a stacked torch.Tensor"""
+
+            if test_funcs is None:
+                return None
+
+            return torch.reshape(
+                torch.from_numpy(
+                    test_funcs.isel(
+                        {
+                            var: slice(1, -1)
+                            for var in test_funcs.attrs["space_dimensions"]
+                        }
+                    ).data
+                ),
+                (
+                    len(test_funcs.coords["tf_idx"]),
+                    -1,
+                    test_funcs.attrs["grid_dimension"],
+                ),
+            ).float()
+
         self._name = name
         self._time = 0
         self._h5group = h5group
@@ -153,6 +196,9 @@ class VPINN:
             .to(device)
         )
 
+        # The density of the grid
+        self.domain_density = grid.attrs["grid_density"]
+
         # Training data (boundary conditions)
         self.training_data: torch.Tensor = (
             torch.from_numpy(
@@ -163,32 +209,19 @@ class VPINN:
         )
 
         # Value of the external function integrated against all the test functions
-        self.f_integrated: xr.DataArray = f_integrated
+        self.f_integrated: torch.Tensor = torch.reshape(
+            torch.from_numpy(f_integrated.data), (-1, 1)
+        )
 
-        # Values of the test functions and their derivatives on the grid interior
-        # TODO: transform to tensor here?
-        self.test_func_values: xr.DataArray = test_func_values.isel(
-            {var: slice(1, -1) for var in test_func_values.attrs["space_dimensions"]}
+        # Test function values on the grid interior, indexed by their (multi-)index and grid coordinate
+        self.test_func_values: torch.Tensor = _tf_to_tensor(test_func_values)
+
+        self.d1test_func_values: Union[None, torch.Tensor] = _dtf_to_tensor(
+            d1test_func_values
         )
-        self.d1test_func_values: Union[None, xr.DataArray] = (
-            d1test_func_values.isel(
-                {
-                    var: slice(1, -1)
-                    for var in test_func_values.attrs["space_dimensions"]
-                }
-            )
-            if d1test_func_values is not None
-            else None
-        )
-        self.d2test_func_values: Union[None, xr.DataArray] = (
-            d2test_func_values.isel(
-                {
-                    var: slice(1, -1)
-                    for var in test_func_values.attrs["space_dimensions"]
-                }
-            )
-            if d2test_func_values is not None
-            else None
+
+        self.d2test_func_values: Union[None, xr.DataArray] = _dtf_to_tensor(
+            d2test_func_values
         )
         self.d1test_func_values_boundary: Union[
             None, xr.DataArray
@@ -224,6 +257,7 @@ class VPINN:
             self.f_integrated,
             self.test_func_values,
             self.weights,
+            self.domain_density,
             self.d1test_func_values,
             self.d2test_func_values,
             self.d1test_func_values_boundary,
@@ -233,6 +267,7 @@ class VPINN:
             boundary_loss_weight * boundary_loss
             + variational_loss_weight * variational_loss
         )
+
         loss.backward()
 
         # Adjust the model parameters
@@ -369,7 +404,7 @@ if __name__ == "__main__":
         if _ % 100 == 0:
             log.progress(
                 f"   Completed epoch {_} / {num_epochs}; "
-                f"   current loss: {model.current_loss[0]}"
+                f"   current loss: {model.current_loss}"
             )
 
     log.info("   Simulation run finished. Generating prediction ...")

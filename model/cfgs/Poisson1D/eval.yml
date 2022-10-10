@@ -86,3 +86,21 @@ d1_test_functions:
   select:
     data:
       path: data/d1_test_function_values
+
+f_integrated:
+  based_on: line
+  select:
+    data: data/f_integrated
+  x: n_x
+  helpers:
+    set_tick_locators:
+      x:
+        major:
+          name: MaxNLocator
+          integer: true
+
+# Plot f evaluated on the grid
+forcing:
+  based_on: line
+  select:
+    data: data/f_evaluated

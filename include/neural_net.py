@@ -205,6 +205,7 @@ class NeuralNet(nn.Module):
         f_integrated,
         test_func_vals,
         weights,
+        domain_density,
         d1test_func_vals=None,
         d2test_func_vals=None,
         d1test_func_vals_bd=None,
@@ -230,11 +231,11 @@ class NeuralNet(nn.Module):
                 self.forward,
                 self.grad,
                 grid,
+                domain_density,
                 f_integrated,
-                test_func_vals,
                 d1test_func_vals,
-                self._var_form,
-                self._pde_constants,
+                weights,
+                self._pde_constants.get("Burger", 0),
             )
 
         elif self._eq_type == "Helmholtz":
@@ -257,19 +258,20 @@ class NeuralNet(nn.Module):
         elif self._eq_type == "Poisson":
 
             return Poisson(
+                self._var_form,
                 self.forward,
                 self.grad,
                 self.gradgrad,
                 grid,
-                grid_boundary,
-                normals,
+                domain_density,
                 f_integrated,
                 test_func_vals,
                 weights,
+                grid_boundary,
+                normals,
                 d1test_func_vals,
                 d2test_func_vals,
                 d1test_func_vals_bd,
-                self._var_form,
             )
 
         elif self._eq_type == "PorousMedium":

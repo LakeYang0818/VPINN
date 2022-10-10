@@ -122,13 +122,14 @@ def split_derivative_orders(d: Sequence) -> Sequence[Sequence]:
     :param d: the multiindex of the derivatives
     :return: the sequenced derivatives
     """
-    if np.array_equal(d, 0):
-        return [int(d)]
+    if (np.array(d) == 0).all():
+        return [np.array(d, dtype=int)]
     else:
         res = []
-        for idx in np.nonzero(d):
+        for idx in np.nonzero(d)[0]:
             res.append(np.zeros(len(d), dtype=int))
             res[-1][idx] = d[idx]
+
         return res
 
 
@@ -202,9 +203,10 @@ def tf_grid_evaluation(
         else:
 
             d = split_derivative_orders(np.ones(dim) * d)
-
             d_res = []
-            for order in d:
+
+            # Calculate the derivatives along each axis
+            for j, derivative_axis in enumerate(d):
 
                 res = []
                 for k, ax in enumerate(grid.attrs["space_dimensions"]):
@@ -214,7 +216,7 @@ def tf_grid_evaluation(
                             grid.coords[ax],
                             index[k],
                             dim=1,
-                            d=order[k],
+                            d=derivative_axis[k],
                             type=type,
                             core_dim=None,
                         ).data
@@ -231,17 +233,18 @@ def tf_grid_evaluation(
                     x, y, z = np.meshgrid(res[0], res[1], res[2])
                     data = np.stack([x, y, z], axis=-1)
 
-                # Combine them into a xr.DataArray
+                # Combine into a xr.DataArray by stacking along the axes of partial differentiation
                 d_res.append(
-                    xr.DataArray(coords=grid.coords, data=data, dims=grid.dims).prod(
-                        dim="idx", keep_attrs=True
-                    )
+                    xr.DataArray(coords=grid.coords, data=data, dims=grid.dims)
+                    .prod(dim="idx", keep_attrs=True)
+                    .assign_coords(idx=j)
+                    .expand_dims({"idx": [j]}, axis=-1)
                 )
 
-            summed_derivatives = sum(d_res)
-            summed_derivatives.attrs = grid.attrs
+            stacked_derivatives = xr.concat(d_res, dim="idx")
+            stacked_derivatives.attrs = grid.attrs
 
-            return summed_derivatives
+            return stacked_derivatives
 
     tf_labels = list(test_function_indices.coords)
     tf_labels.remove("idx")

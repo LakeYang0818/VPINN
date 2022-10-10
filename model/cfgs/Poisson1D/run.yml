@@ -2,16 +2,17 @@
 paths:
   model_note: Poisson1D
 parameter_space:
-  num_epochs: 8000
+  num_epochs: 2000
   VPINN:
     space:
       x:
         extent: [ -1, 1 ]
-        size: 60
+        size: 20
     PDE:
       function: Tanh
       type: Poisson
     test_functions:
+      type: Legendre
       num_functions:
         n_x:
           size: 60
@@ -22,7 +23,8 @@ parameter_space:
       nodes_per_layer: 20
       activation_funcs: sin
     Training:
-      learning_rate: 0.0001
+      learning_rate: 0.001
+      variational_loss_weight: 2
     predictions_grid:
       x:
-        size: 100
+        size: 60
