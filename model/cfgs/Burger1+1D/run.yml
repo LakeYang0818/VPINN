@@ -2,15 +2,15 @@
 paths:
   model_note: Burger1+1D
 parameter_space:
-  num_epochs: 0
+  num_epochs: 400
   VPINN:
     space:
       x:
         extent: [-1, 1]
-        size: 300
+        size: 100
       y:
         extent: [0, 2]
-        size: 300
+        size: 80
     PDE:
       function: Burger1+1D
       type: Burger
@@ -18,9 +18,9 @@ parameter_space:
       type: Sine
       num_functions:
         n_x:
-          size: 2
+          size: 20
         n_y:
-          size: 2
+          size: 20
       weight_function: exponential
     NeuralNet:
       activation_funcs:

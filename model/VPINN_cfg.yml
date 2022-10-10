@@ -1,38 +1,43 @@
 ---
-# Domain settings ......................................................................................................
+# Data loading .........................................................................................................
+
 load_from_dir: ~
 
+# Domain settings ......................................................................................................
 space:
   x:
-    extent: [-1, 1]
-    size: 20
-  y:
     extent: [-1, 1]
     size: 20
 
 # PDE parameters .......................................................................................................
 PDE:
-  type: Poisson
-  function: SinSin2D
+  type: !param
+    default: Poisson
+    dtype: str
+    is_any_of: [Poisson, Burger, Helmholtz, Weak1D, PorousMedium]
+  function: !param
+    default: Tanh
+    dtype: str
+    is_any_of: [Tanh, Tanh2D, Burger1+1D, DoubleGauss1D, CubedRoot, PorousMedium]
   PorousMedium:
     m: 2
   Helmholtz:
     k: -2.5
   Burger:
-    nu: 0
+    nu: !is-positive-or-zero 0
 
 # The variational form to use; can be 0, 1, or 2
-variational_form: 1
+variational_form: !param
+  default: 1
+  is_any_of: [0, 1, 2]
 
 # Test function settings ...............................................................................................
 test_functions:
   num_functions:
     n_x:
-      size: 2
-    n_y:
-      size: 2
+      size: 3
   type: !param
-    default: Lege
+    default: Legendre
     dtype: str
     is_any_of: [Legendre, Chebyshev, Sine]
 
@@ -44,8 +49,8 @@ test_functions:
 
 # Neural net architecture ..............................................................................................
 NeuralNet:
-  num_layers: 4
-  nodes_per_layer: 20
+  num_layers: !is-positive-int 4
+  nodes_per_layer: !is-positive-int 20
   activation_funcs: sin
   optimizer: !param
     default: Adam
@@ -58,3 +63,4 @@ Training:
   learning_rate: 0.001
   boundary_loss_weight: 1
   variational_loss_weight: 1
+  write_time: True

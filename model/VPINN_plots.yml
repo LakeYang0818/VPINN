@@ -20,17 +20,16 @@ loss:
 
 # Plot f evaluated on the grid
 forcing:
-  based_on: heatmap
+  based_on: line
   select:
     data: data/f_evaluated
 
 # Plot the values of f integrated against the test functions
 f_integrated:
-  based_on: heatmap
+  based_on: line
   select:
     data: data/f_integrated
   x: n_x
-  y: n_y
   helpers:
     set_tick_locators:
       x: &formatting
@@ -39,12 +38,6 @@ f_integrated:
           integer: true
       y:
         <<: *formatting
-
-# Plot the exact solution
-u_exact:
-  based_on: heatmap
-  select:
-    data: VPINN/u_exact
 
 u_boundary:
   based_on: grid_boundary2d
@@ -77,9 +70,24 @@ u_boundary:
   hue: u
 
 predictions:
-  based_on: heatmap
+  based_on: line
   select:
-    data: VPINN/predictions
+    prediction:
+      path: VPINN/predictions
+      transform:
+        - .data: [!dag_prev ]
+    solution:
+      path: VPINN/u_exact
+      transform:
+        - .data: [!dag_prev ]
+  transform:
+    - operation: pd.Index
+      args: [ [ 'prediction', 'exact solution' ] ]
+      kwargs:
+        name: 'kind'
+    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
+      tag: data
+  hue: kind
 
 # Plot the test functions
 test_functions:

@@ -41,7 +41,6 @@ class VPINN:
         device: str,
         write_every: int = 1,
         write_start: int = 1,
-        write_time: bool = False,
         grid: xr.DataArray,
         training_data: xr.Dataset = None,
         f_integrated: xr.DataArray,
@@ -63,7 +62,6 @@ class VPINN:
             device: the device to use
             write_every: write every iteration
             write_start: iteration at which to start writing
-            write_time: whether to write out the training time into a dataset
             grid (xr.DataArray): the grid
             boundary (xr.Dataset): the grid boundary
             training_data (xr.Datatset): the training_data, consisting of the values of the
@@ -109,21 +107,19 @@ class VPINN:
             "variational loss",
         ]
 
-        if write_time:
-            self.dset_time = self._h5group.create_dataset(
-                "computation_time",
-                (0, 1),
-                maxshape=(None, 1),
-                chunks=True,
-                compression=3,
-            )
-            self.dset_time.attrs["dim_names"] = ["epoch", "training_time"]
-            self.dset_time.attrs["coords_mode__epoch"] = "trivial"
-            self.dset_time.attrs["coords_mode__training_time"] = "trivial"
+        # Write the training time after each epoch
+        self.dset_time = self._h5group.create_dataset(
+            "computation_time",
+            (0, 1),
+            maxshape=(None, 1),
+            chunks=True,
+            compression=3,
+        )
+        self.dset_time.attrs["dim_names"] = ["epoch", "dim_name__1"]
+        self.dset_time.attrs["coords_mode__epoch"] = "trivial"
 
         self._write_every = write_every
         self._write_start = write_start
-        self.write_time = write_time
 
         # The grid interior
         self.grid: torch.Tensor = (
@@ -252,9 +248,8 @@ class VPINN:
         self._time += 1
 
         # Write the training time (wall clock time)
-        if self.write_time:
-            self.dset_time.resize(self.dset_time.shape[0] + 1, axis=0)
-            self.dset_time[-1, :] = time.time() - start_time
+        self.dset_time.resize(self.dset_time.shape[0] + 1, axis=0)
+        self.dset_time[-1, :] = time.time() - start_time
 
     def write_data(self):
         """Write the current state (loss and parameter predictions) into the state dataset.
