@@ -1,0 +1,123 @@
+.colors: &colors
+  yellow:         &yellow           '#F5DDA9'
+  darkblue:       &darkblue         '#2F7194'
+  red:            &red              '#ec7070'
+  skyblue:        &skyblue          '#97c3d0'
+  darkgreen:      &darkgreen        '#48675A'
+  lightbrown:     &lightbrown       '#C6BFA2'
+  orange:         &orange           '#EC9F7E'
+  lightgreen:     &lightgreen       '#AFD8BC'
+  grey:           &grey             '#3D4244'
+
+# ======================================================================================================================
+#  ╔═╗╦  ╔═╗╔╦╗╔═╗
+#  ╠═╝║  ║ ║ ║ ╚═╗
+#  ╩  ╩═╝╚═╝ ╩ ╚═╝
+# ======================================================================================================================
+# Plot the evolution of the training loss
+loss:
+  based_on: loss
+
+# Plot f evaluated on the grid
+forcing:
+  based_on: line
+  select:
+    data: data/f_evaluated
+
+# Plot the values of f integrated against the test functions
+f_integrated:
+  based_on: line
+  select:
+    data: data/f_integrated
+  x: n_x
+  helpers:
+    set_tick_locators:
+      x: &formatting
+        major:
+          name: MaxNLocator
+          integer: true
+      y:
+        <<: *formatting
+
+u_boundary:
+  based_on: grid_boundary2d
+  select:
+    vals: data/u_exact_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - .isel: [ !dag_tag vals, { variable: 1 } ]
+      kwargs:
+        drop: true
+      tag: dim2
+    - .sel: [ !dag_tag vals, { variable: 'u' } ]
+      kwargs:
+        drop: true
+      tag: n
+    - xr.Dataset:
+        - dim1: !dag_tag dim1
+          dim2: !dag_tag dim2
+          u: !dag_tag n
+      tag: data
+  cmap:
+    continuous: true
+    from_values:
+      0: *darkblue
+      0.5: *yellow
+      1: *red
+  hue: u
+
+predictions:
+  based_on: line
+  select:
+    prediction:
+      path: VPINN/predictions
+      transform:
+        - .data: [!dag_prev ]
+    solution:
+      path: VPINN/u_exact
+      transform:
+        - .data: [!dag_prev ]
+  transform:
+    - operation: pd.Index
+      args: [ [ 'prediction', 'exact solution' ] ]
+      kwargs:
+        name: 'kind'
+    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
+      tag: data
+  hue: kind
+
+# Plot the test functions
+test_functions:
+  based_on: heatmap
+  select:
+    data: data/test_function_values
+  row: n_x
+  col: n_y
+
+# Plot the first derivative of the test functions
+d1_test_functions:
+  based_on: test_functions
+  select:
+    data: data/d1_test_function_values
+
+
+# Plot the second derivative of the test functions
+d2_test_functions:
+  based_on: test_functions
+  select:
+    data: data/d2_test_function_values
+
+# Plot the grid
+grid:
+  based_on: grid2d
+
+# Plot the solution on the boundary
+grid_boundary:
+  based_on: grid_boundary2d
+  cmap:
+    from_values:
+      -1: *darkblue
+      1: *red

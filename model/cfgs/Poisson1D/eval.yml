@@ -1,0 +1,88 @@
+---
+.colors: &colors
+  yellow:         &yellow           '#F5DDA9'
+  darkblue:       &darkblue         '#2F7194'
+  red:            &red              '#ec7070'
+  skyblue:        &skyblue          '#97c3d0'
+  darkgreen:      &darkgreen        '#48675A'
+  lightbrown:     &lightbrown       '#C6BFA2'
+  orange:         &orange           '#EC9F7E'
+  lightgreen:     &lightgreen       '#AFD8BC'
+  grey:           &grey             '#3D4244'
+
+predictions:
+  based_on: line
+  select:
+    prediction:
+      path: VPINN/predictions
+      transform:
+        - .data: [!dag_prev ]
+    solution:
+      path: VPINN/u_exact
+      transform:
+        - .data: [!dag_prev ]
+  transform:
+    - operation: pd.Index
+      args: [ [ 'prediction', 'exact solution' ] ]
+      kwargs:
+        name: 'kind'
+    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
+      tag: data
+  hue: kind
+
+loss:
+  based_on: loss
+  helpers:
+    set_scales:
+      y: log
+
+grid:
+  based_on: grid1d
+  c: *grey
+
+grid_boundary:
+  based_on: grid_boundary1d
+
+boundary_conditions:
+  based_on: grid_boundary2d
+  select:
+    vals: data/u_exact_boundary
+  transform:
+    - .isel: [ !dag_prev , { variable: 0 } ]
+      kwargs:
+        drop: true
+      tag: dim1
+    - .isel: [ !dag_tag vals, { variable: 1 } ]
+      kwargs:
+        drop: true
+      tag: dim2
+    - .sel: [ !dag_tag vals, { variable: 'u' } ]
+      kwargs:
+        drop: true
+      tag: u
+    - xr.Dataset:
+      - dim1: !dag_tag dim1
+        dim2: !dag_tag dim2
+        u: !dag_tag u
+      tag: data
+  hue: u
+
+test_functions:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
+  select:
+    data:
+      path: data/test_function_values
+      transform:
+        - .isel: [!dag_prev , {n_x: !range [5]}]
+  hue: n_x
+  helpers:
+    set_legend:
+      use_legend: False
+
+d1_test_functions:
+  based_on: test_functions
+  select:
+    data:
+      path: data/d1_test_function_values

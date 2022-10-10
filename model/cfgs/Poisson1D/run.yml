@@ -1,0 +1,28 @@
+---
+paths:
+  model_note: Poisson1D
+parameter_space:
+  num_epochs: 8000
+  VPINN:
+    space:
+      x:
+        extent: [ -1, 1 ]
+        size: 60
+    PDE:
+      function: Tanh
+      type: Poisson
+    test_functions:
+      num_functions:
+        n_x:
+          size: 60
+      weight_function: exponential
+    variational_form: 0
+    NeuralNet:
+      num_layers: 4
+      nodes_per_layer: 20
+      activation_funcs: sin
+    Training:
+      learning_rate: 0.0001
+    predictions_grid:
+      x:
+        size: 100

@@ -1,0 +1,39 @@
+---
+paths:
+  model_note: Burger1+1D
+parameter_space:
+  num_epochs: 400
+  VPINN:
+    space:
+      x:
+        extent: [-1, 1]
+        size: 100
+      y:
+        extent: [0, 2]
+        size: 80
+    PDE:
+      function: Burger1+1D
+      type: Burger
+    test_functions:
+      type: Sine
+      num_functions:
+        n_x:
+          size: 20
+        n_y:
+          size: 20
+      weight_function: exponential
+    NeuralNet:
+      activation_funcs:
+        1: sin
+        2: sin
+        3: sin
+        4: sin
+        5: abs
+    variational_form: 1
+    Training:
+      boundary: lower
+    predictions_grid:
+      x:
+        size: 100
+      y:
+        size: 100
