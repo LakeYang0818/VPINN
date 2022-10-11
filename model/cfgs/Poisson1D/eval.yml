@@ -1,0 +1,40 @@
+---
+predictions:
+  based_on: line
+  select:
+    prediction:
+      path: VPINN/predictions
+      transform:
+        - .data: [!dag_prev ]
+    solution:
+      path: VPINN/u_exact
+      transform:
+        - .data: [!dag_prev ]
+  transform:
+    - operation: pd.Index
+      args: [ [ 'prediction', 'exact solution' ] ]
+      kwargs:
+        name: 'kind'
+    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
+      tag: data
+  hue: kind
+
+loss:
+  based_on: loss
+  helpers:
+    set_scales:
+      y: log
+
+test_functions:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
+  select:
+    data:
+      path: VPINN/test_function_values
+      transform:
+        - .isel: [!dag_prev , {n_x: !range [5]}]
+  hue: n_x
+  helpers:
+    set_legend:
+      use_legend: False

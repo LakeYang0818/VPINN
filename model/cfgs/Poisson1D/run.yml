@@ -1,0 +1,26 @@
+---
+paths:
+  model_note: Poisson2D
+parameter_space:
+  num_epochs: 5000
+  VPINN:
+    space:
+      dimension: 1
+      boundary:
+        x: [-1, 1]
+      grid_size:
+        x: 40
+    PDE:
+      function: Tanh
+      type: Poisson
+    test_functions:
+      type: Legendre
+      N_test_functions:
+        x: 80
+      weight_function: exponential
+    variational_form: 0
+    predictions_grid:
+      x:
+        size: 100
+      y:
+        size: 100
