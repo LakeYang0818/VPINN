@@ -37,13 +37,7 @@ def get_activation_funcs(n_layers: int, cfg: Union[str, dict] = None) -> List[An
         return [return_function(cfg)] * (n_layers + 1)
     elif isinstance(cfg, dict):
         for val in cfg.keys():
-            if val in [0]:
-                funcs[0] = return_function(cfg[0])
-            elif val in [-1]:
-                funcs[-1] = return_function(cfg[-1])
-            else:
-                funcs[val - 1] = return_function(cfg[val])
-
+            funcs[val] = return_function(cfg[val])
         return funcs
     else:
         raise ValueError(f"Unrecognised argument {cfg} for 'activation_funcs'!")
@@ -138,11 +132,11 @@ class NeuralNet(nn.Module):
         # Add the neural net layers
         self.layers = nn.ModuleList()
         for i in range(len(architecture) - 1):
-            layer = nn.Linear(architecture[i], architecture[i + 1], bias=bias)
+            layer = nn.Linear(architecture[i], architecture[i + 1])
 
-            # Initialise the biases of the layers with a uniform distribution on init_bias
-            if bias and init_bias is not None:
-                torch.nn.init.uniform_(layer.bias, init_bias[0], init_bias[1])
+            # # Initialise the biases of the layers with a uniform distribution on init_bias
+            # if bias and init_bias is not None:
+            #     torch.nn.init.uniform_(layer.bias, init_bias[0], init_bias[1])
             self.layers.append(layer)
 
         # Get the optimizer
