@@ -135,14 +135,14 @@ rather than just a name). Running the configuration set will produce plots. If y
 you do not need to re-run the model, since the data has already been generated. Simply call
 
 ```console
-utopya eval HarrisWilson --cfg-set <name_of_cfg_set>
+utopya eval VPINN --cfg-set <name_of_cfg_set>
 ```
 
 This will re-evaluate the *last model you ran*. You can re-evaluate any dataset, of course, by
 providing the path to that dataset, as before:
 
 ```console
-utopya eval HarrisWilson path/to/output/folder --cfg-set <name_of_cfg_set>
+utopya eval VPINN path/to/output/folder --cfg-set <name_of_cfg_set>
 ```
 ## Modifying the configuration
 To control the simulation, modify the entries in your run configuration. There are
