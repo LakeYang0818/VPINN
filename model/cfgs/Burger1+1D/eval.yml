@@ -10,10 +10,28 @@
   lightgreen:     &lightgreen       '#AFD8BC'
   grey:           &grey             '#3D4244'
 
+# Plot the predictions as a heatmap
 predictions:
   based_on: heatmap
   select:
     data: VPINN/predictions
+
+# Plot the predictions as animated frames
+predictions_frames:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
+    - .plot.facet_grid.with_auto_encoding
+  select:
+    data:
+      path: VPINN/predictions
+      transform:
+        - .isel: [!dag_prev , {y: !slice [~, ~, 33]}]
+  x: x
+  col: y
+  helpers:
+    set_suptitle:
+      enabled: False
 
 boundary_condition:
   based_on: line
@@ -29,6 +47,7 @@ loss:
     set_scales:
       y: log
 
+# Plot the test functions
 test_functions:
   based_on: heatmap
   select:
@@ -44,3 +63,21 @@ test_functions:
       0: *darkblue
       0.5: *red
       1: *yellow
+
+# Plot the test function derivatives in x direction
+d1_test_functions_x:
+  based_on: test_functions
+  select:
+    data:
+      path: VPINN/d1_test_function_values
+      transform:
+        - .isel: [ !dag_prev , { n_x: !range [ 3 ], n_y: !range [ 3 ], idx: 0} ]
+
+# Plot the test function derivatives in y direction
+d1_test_functions_y:
+  based_on: test_functions
+  select:
+    data:
+      path: VPINN/d1_test_function_values
+      transform:
+        - .isel: [ !dag_prev , { n_x: !range [ 3 ], n_y: !range [ 3 ], idx: 1} ]

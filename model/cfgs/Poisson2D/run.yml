@@ -11,19 +11,18 @@ parameter_space:
         y: [-1, 1]
       grid_size:
         x: 10
-        y: 30
+        y: 10
     PDE:
       function: SinSin2D
       type: Poisson
     test_functions:
       type: Legendre
       N_test_functions:
-        x: 5
-        y: 5
+        x: 10
+        y: 10
       weight_function: exponential
     variational_form: 2
     predictions_grid:
-      x:
-        size: 100
-      y:
-        size: 100
+      grid_size:
+        x: 200
+        y: 200

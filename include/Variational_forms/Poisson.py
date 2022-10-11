@@ -45,20 +45,30 @@ def Poisson(
         laplace = torch.sum(ddu(grid.interior, requires_grad=True), dim=1, keepdim=True)
 
         for i in range(f_integrated.size):
-            loss_v = loss_v + torch.square(
-                integrate(laplace, test_func_vals.data[i], domain_volume=grid.volume)
-                - f_integrated.data[i]
-            ) * weight_function(test_func_vals.coords[i])
+            loss_v = (
+                loss_v
+                + torch.square(
+                    integrate(
+                        laplace, test_func_vals.data[i], domain_volume=grid.volume
+                    )
+                    - f_integrated.data[i]
+                )
+                * weight_function(test_func_vals.coords[i]) ** 2
+            )
 
     elif var_form == 1:
 
         grad = du(grid.interior, requires_grad=True)
 
         for i in range(f_integrated.size):
-            loss_v = loss_v + torch.square(
-                integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume)
-                + f_integrated.data[i]
-            ) * weight_function(test_func_vals.coords[i])
+            loss_v = (
+                loss_v
+                + torch.square(
+                    integrate(grad, d1test_func_vals.data[i], domain_volume=grid.volume)
+                    + f_integrated.data[i]
+                )
+                * weight_function(test_func_vals.coords[i]) ** 2
+            )
 
     elif var_form == 2:
 
@@ -66,22 +76,26 @@ def Poisson(
         u_int = u(grid.interior)
 
         for i in range(f_integrated.size):
-            loss_v = loss_v + torch.square(
-                integrate(
-                    u_int,
-                    torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True),
-                    domain_volume=grid.volume,
+            loss_v = (
+                loss_v
+                + torch.square(
+                    integrate(
+                        u_int,
+                        torch.sum(d2test_func_vals.data[i], dim=1, keepdim=True),
+                        domain_volume=grid.volume,
+                    )
+                    - integrate(
+                        u_bd,
+                        torch.sum(
+                            torch.mul(d1test_func_vals_bd.data[i], grid.normals),
+                            dim=1,
+                            keepdim=True,
+                        ),
+                        domain_volume=grid.volume,
+                    )
+                    - f_integrated.data[i]
                 )
-                - integrate(
-                    u_bd,
-                    torch.sum(
-                        torch.mul(d1test_func_vals_bd.data[i], grid.normals),
-                        dim=1,
-                        keepdim=True,
-                    ),
-                    domain_volume=grid.volume,
-                )
-                - f_integrated.data[i]
-            ) * weight_function(test_func_vals.coords[i])
+                * weight_function(test_func_vals.coords[i]) ** 2
+            )
 
     return loss_v / f_integrated.size

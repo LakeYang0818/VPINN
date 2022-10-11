@@ -49,7 +49,7 @@ def get_activation_funcs(n_layers: int, cfg: Union[str, dict] = None) -> List[An
         raise ValueError(f"Unrecognised argument {cfg} for 'activation_funcs'!")
 
 
-class VPINN(nn.Module):
+class NeuralNet(nn.Module):
     """A variational physics-informed neural net. Inherits from the nn.Module parent."""
 
     VAR_FORMS = {0, 1, 2}
@@ -115,7 +115,7 @@ class VPINN(nn.Module):
                 f"Choose from: [1, 2, 3]"
             )
 
-        super(VPINN, self).__init__()
+        super(NeuralNet, self).__init__()
         self.flatten = nn.Flatten()
         self.input_dim = input_size
         self.output_dim = output_size
@@ -131,35 +131,12 @@ class VPINN(nn.Module):
         # Get Adam optimizer
         self.optimizer = self.OPTIMIZERS[optimizer](self.parameters(), lr=learning_rate)
 
-        # Initialize the loss tracker dictionary, which can be used to later evaluate the training progress
-        self._loss_tracker: dict = {
-            "iter": [],
-            "total_loss": [],
-            "loss_b": [],
-            "loss_v": [],
-        }
-
         # Get equation type and variational form
         self._eq_type = eq_type
         self._var_form = var_form
 
         # Get equation parameters
         self._pde_constants = pde_constants
-
-    # Return the model loss values
-    @property
-    def loss_tracker(self) -> dict:
-        return self._loss_tracker
-
-    # Updates the loss tracker with a time value and the loss values
-    def update_loss_tracker(self, it, total_loss, loss_b, loss_v):
-        self._loss_tracker["iter"].append(it)
-        self._loss_tracker["total_loss"].append(total_loss)
-        self._loss_tracker["loss_b"].append(loss_b)
-        self._loss_tracker["loss_v"].append(loss_v)
-
-    def reset_loss_tracker(self):
-        self._loss_tracker = {"iter": [], "total_loss": [], "loss_b": [], "loss_v": []}
 
     # ... Evaluation functions .........................................................................................
 
@@ -239,9 +216,7 @@ class VPINN(nn.Module):
                 self.grad,
                 grid,
                 f_integrated,
-                test_func_vals,
                 d1test_func_vals,
-                self._var_form,
                 self._pde_constants,
             )
 

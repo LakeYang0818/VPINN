@@ -63,6 +63,7 @@ def get_data(space_dict, test_func_dict, pde_cfg, *, var_form: int, h5group) -> 
         grid, test_func_dim, d=0, where="interior", which=test_func_type
     )
 
+    log.info("   Evaluating test function derivatives on the grid interior ... ")
     d1test_func_vals: base.DataSet = (
         base.testfunc_grid_evaluation(
             grid, test_func_dim, d=1, where="interior", which=test_func_type
@@ -79,6 +80,7 @@ def get_data(space_dict, test_func_dict, pde_cfg, *, var_form: int, h5group) -> 
         else None
     )
 
+    log.info("   Evaluating test function derivatives on the grid boundary ... ")
     # Evaluate the test functions on the grid boundary
     d1test_func_vals_bd: base.DataSet = (
         base.testfunc_grid_evaluation(
@@ -90,7 +92,7 @@ def get_data(space_dict, test_func_dict, pde_cfg, *, var_form: int, h5group) -> 
 
     # Integrate the external function over the grid against all the test functions.
     # This will be used to calculate the variational loss; this step is costly and only needs to be done once.
-    log.info("   Integrating test functions ...")
+    log.info("   Integrating the test functions ...")
     f_integrated: base.DataSet = base.DataSet(
         coords=test_func_vals.coords,
         data=[
@@ -105,15 +107,50 @@ def get_data(space_dict, test_func_dict, pde_cfg, *, var_form: int, h5group) -> 
         requires_grad=False,
     )
 
+    # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.
+    # For the Burgers equation, training data is the initial data given
+    # on the lower temporal boundary.
+    log.info("   Generating training data ...")
+    if pde_cfg["type"] in ["Burger", "PorousMedium"]:
+        training_data: base.DataSet = base.DataSet(
+            coords=grid.lower_boundary,
+            data=this.u(grid.lower_boundary, func=pde_cfg["function"]),
+            as_tensor=True,
+            requires_grad=False,
+        )
+    else:
+        training_data: base.DataSet = base.DataSet(
+            coords=grid.boundary,
+            data=this.u(grid.boundary, func=pde_cfg["function"]),
+            as_tensor=True,
+            requires_grad=False,
+        )
+
+    log.info("   Saving the data ... ")
     # TODO This can be done automatically with xarray attributes
     if dim == 2:
         tf_data = torch.reshape(
             test_func_vals.data,
             (test_func_dim[1], test_func_dim[0], len(grid.y) - 2, len(grid.x) - 2, 1),
         )
+        tf_d1_data = (
+            torch.reshape(
+                d1test_func_vals.data,
+                (
+                    test_func_dim[1],
+                    test_func_dim[0],
+                    len(grid.y) - 2,
+                    len(grid.x) - 2,
+                    2,
+                ),
+            )
+            if d1test_func_vals is not None
+            else None
+        )
         tf_dims = ["n_y", "n_x", "y", "x", "idx"]
     else:
         tf_data = test_func_vals.data
+        tf_d1_data = d1test_func_vals.data if d1test_func_vals is not None else None
         tf_dims = ["n_x", "x", "idx"]
 
     # Store the test functions
@@ -140,6 +177,31 @@ def get_data(space_dict, test_func_dict, pde_cfg, *, var_form: int, h5group) -> 
         :,
     ] = tf_data
 
+    if d1test_func_vals is not None:
+        # Store the test function derivatives
+        dset_d1_test_func_vals = h5group.create_dataset(
+            "d1_test_function_values",
+            tf_d1_data.shape,
+            maxshape=tf_d1_data.shape,
+            chunks=True,
+            compression=3,
+        )
+        dset_d1_test_func_vals.attrs["dim_names"] = tf_dims
+
+        dset_d1_test_func_vals.attrs["coords_mode__n_x"] = "trivial"
+        dset_d1_test_func_vals.attrs["coords_moe__idx"] = "trivial"
+        dset_d1_test_func_vals.attrs["coords_mode__x"] = "values"
+        dset_d1_test_func_vals.attrs["coords__x"] = torch.flatten(grid.x)[1:-1]
+
+        if dim == 2:
+            dset_d1_test_func_vals.attrs["coords_mode__n_y"] = "trivial"
+            dset_d1_test_func_vals.attrs["coords_mode__y"] = "values"
+            dset_d1_test_func_vals.attrs["coords__y"] = torch.flatten(grid.y)[1:-1]
+
+        dset_d1_test_func_vals[
+            :,
+        ] = tf_d1_data
+
     return dict(
         grid=grid,
         test_func_vals=test_func_vals,
@@ -147,4 +209,5 @@ def get_data(space_dict, test_func_dict, pde_cfg, *, var_form: int, h5group) -> 
         d2test_func_vals=d2test_func_vals,
         d1test_func_vals_bd=d1test_func_vals_bd,
         f_integrated=f_integrated,
+        training_data=training_data,
     )

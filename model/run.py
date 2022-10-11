@@ -93,7 +93,7 @@ if __name__ == "__main__":
         "PorousMedium": model_cfg["PDE"]["PorousMedium"]["m"],
     }
 
-    # Get the data
+    # Get all the necessary data
     data: dict = this.get_data(
         model_cfg["space"],
         model_cfg["test_functions"],
@@ -103,14 +103,13 @@ if __name__ == "__main__":
     )
     grid = data["grid"]
 
-    # The weight function for the test functions. Takes an index or a tuple of indices
-    # TO DO: this should be done more carefully
+    # The weight function for the test functions.
     weight_function = this.WEIGHT_FUNCTIONS[
         model_cfg["test_functions"]["weight_function"]
     ]
 
     # Instantiate the model class
-    model: base.VPINN = base.VPINN(
+    neural_net: base.NeuralNet = base.NeuralNet(
         eq_type,
         var_form,
         pde_constants=PDE_constants,
@@ -122,25 +121,6 @@ if __name__ == "__main__":
     # Turn on tracking for the grid interior, on which the variational loss is calculated
     grid.interior.requires_grad = True
 
-    # Prepare the training data. The training data consists of the explicit solution of the function on the boundary.
-    # For the Burgers equation, training data is the initial data given
-    # on the lower temporal boundary.
-    log.info("   Generating training data ...")
-    if eq_type in ["Burger", "PorousMedium"]:
-        training_data: base.DataSet = base.DataSet(
-            coords=grid.lower_boundary,
-            data=this.u(grid.lower_boundary, func=model_cfg["PDE"]["function"]),
-            as_tensor=True,
-            requires_grad=False,
-        )
-    else:
-        training_data: base.DataSet = base.DataSet(
-            coords=grid.boundary,
-            data=this.u(grid.boundary, func=model_cfg["PDE"]["function"]),
-            as_tensor=True,
-            requires_grad=False,
-        )
-
     # Train the model
     num_epochs = cfg["num_epochs"]
     log.info(f"   Now commencing training for {num_epochs} epochs ...")
@@ -151,11 +131,11 @@ if __name__ == "__main__":
     start_time = time.time()
     for it in range(num_epochs):
 
-        model.optimizer.zero_grad()
+        neural_net.optimizer.zero_grad()
 
         # Calculate the loss
-        loss_b = model.boundary_loss(training_data)
-        loss_v = model.variational_loss(
+        loss_b = neural_net.boundary_loss(data["training_data"])
+        loss_v = neural_net.variational_loss(
             grid,
             data["f_integrated"],
             data["test_func_vals"],
@@ -168,7 +148,7 @@ if __name__ == "__main__":
         loss.backward()
 
         # Adjust the model parameters
-        model.optimizer.step()
+        neural_net.optimizer.step()
 
         # Track loss values
         dset_loss.resize(dset_loss.shape[0] + 1, axis=0)
@@ -197,7 +177,7 @@ if __name__ == "__main__":
 
     # Get the model predictions on the plotting grid. Turn off tracking for the prediction data.
     predictions = torch.reshape(
-        model.forward(plot_grid.data).detach(), (len(plot_grid.x), -1)
+        neural_net.forward(plot_grid.data).detach(), (len(plot_grid.x), -1)
     )
 
     # ------------------------------------------------------------------------------------------------------------------

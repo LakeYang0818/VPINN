@@ -10,20 +10,18 @@ parameter_space:
         x: [-1, 1]
         y: [0, 2]
       grid_size:
-        x: 10
-        y: 30
+        x: 100
+        y: 100
     PDE:
       function: Burger1+1D
       type: Burger
     test_functions:
       type: Legendre
       N_test_functions:
-        x: 5
-        y: 5
+        x: 10
+        y: 10
       weight_function: exponential
-    variational_form: 2
     predictions_grid:
-      x:
-        size: 100
-      y:
+      grid_size:
+        x: 100
         size: 100

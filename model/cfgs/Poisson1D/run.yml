@@ -9,18 +9,16 @@ parameter_space:
       boundary:
         x: [-1, 1]
       grid_size:
-        x: 40
+        x: 80
     PDE:
       function: Tanh
       type: Poisson
     test_functions:
       type: Legendre
       N_test_functions:
-        x: 80
-      weight_function: exponential
-    variational_form: 0
+        x: 602
+      weight_function: uniform
+    variational_form: 1
     predictions_grid:
-      x:
-        size: 100
-      y:
-        size: 100
+      grid_size:
+        x: 100

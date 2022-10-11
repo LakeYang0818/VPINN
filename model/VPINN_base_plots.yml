@@ -37,8 +37,8 @@
                               '{colors[grey]:}'])"
       colors: *colors
     axes.grid:          True
-#    axes.spines.top:    False
-#    axes.spines.right:  False
+    axes.spines.top:    False
+    axes.spines.right:  False
     legend.fontsize: 9
   helpers:
     save_figure:
