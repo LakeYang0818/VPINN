@@ -19,6 +19,17 @@ solution:
   based_on: heatmap
   select:
     data: VPINN/u_exact
+
+error:
+  based_on: heatmap
+  select:
+    prediction: VPINN/predictions
+    solution: VPINN/u_exact
+  transform:
+    - sub: [!dag_tag prediction, !dag_tag solution]
+    - np.abs: [!dag_prev ]
+      tag: data
+
 loss:
   based_on: loss
   helpers:
@@ -78,7 +89,7 @@ d1test_functions_x:
     data:
       path: data/d1_test_function_values
       transform:
-        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [4], idx: 0}]
+        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3], idx: 0}]
   row: n_x
   col: n_y
   cbar_kwargs:
@@ -91,7 +102,7 @@ d1test_functions_y:
     data:
       path: data/d1_test_function_values
       transform:
-        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [4], idx: 1}]
+        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3], idx: 1}]
   row: n_x
   col: n_y
   cbar_kwargs:
@@ -104,6 +115,7 @@ d1test_functions_norm:
     data:
       path: data/d1_test_function_values
       transform:
+        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3], idx: 1}]
         - squared: [ !dag_prev ,  ]
         - .sum: [!dag_prev , 'idx']
   row: n_x

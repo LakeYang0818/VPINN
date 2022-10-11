@@ -15,7 +15,7 @@
 
 .default_style:
   style:
-    text.usetex:        True
+    text.usetex:        False
     mathtext.fontset:   cm
     font.family:        serif
     font.size:          &fontsize 9
@@ -37,8 +37,6 @@
                               '{colors[grey]:}'])"
       colors: *colors
     axes.grid:          True
-#    axes.spines.top:    False
-#    axes.spines.right:  False
     legend.fontsize: 9
   helpers:
     save_figure:
@@ -188,18 +186,13 @@ grid_boundary2d:
       kwargs:
         drop: true
       tag: dim2
-    - .sel: [ !dag_tag vals, { variable: 'n' } ]
-      kwargs:
-        drop: true
-      tag: n
     - xr.Dataset:
         - dim1: !dag_tag dim1
           dim2: !dag_tag dim2
-          n: !dag_tag n
       tag: data
   x: dim1
   y: dim2
-  hue: n
+  c: *darkblue
 
 # 3-dimensional grid
 grid3d:
@@ -256,22 +249,15 @@ grid_boundary3d:
       kwargs:
         drop: true
       tag: dim3
-    - .isel: [ !dag_tag vals, { variable: -1 } ]
-      kwargs:
-        drop: true
-      tag: n
     - xr.Dataset:
         - x: !dag_tag dim1
           y: !dag_tag dim2
           z: !dag_tag dim3
-          n: !dag_tag n
       tag: data
   x: dim1
   y: dim2
   z: dim3
-  hue: n
-#  cmap:
-#    <<: *normals_cmap
+  c: *darkblue
 
 # ======================================================================================================================
 #  ╔═╗╦═╗╔═╗╔╦╗╦╔═╗╔╦╗╦╔═╗╔╗╔╔═╗
