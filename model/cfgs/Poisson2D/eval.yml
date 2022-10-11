@@ -20,6 +20,16 @@ solution:
   select:
     data: VPINN/u_exact
 
+error:
+  based_on: heatmap
+  select:
+    prediction: VPINN/predictions
+    solution: VPINN/u_exact
+  transform:
+    - sub: [!dag_tag prediction, !dag_tag solution]
+    - np.abs: [!dag_prev ]
+      tag: data
+
 loss:
   based_on: loss
   helpers:
