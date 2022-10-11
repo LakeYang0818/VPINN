@@ -42,7 +42,7 @@ def Poisson(
     """
 
     # Track the variational loss
-    loss_v = torch.tensor(0.0, requires_grad=True)
+    loss_v = torch.tensor([0.0], requires_grad=True)
 
     if variational_form == 0:
 

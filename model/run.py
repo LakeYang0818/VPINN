@@ -234,25 +234,33 @@ class VPINN:
         )
 
         # Test function values on the grid interior, indexed by their (multi-)index and grid coordinate
-        self.test_func_values: torch.Tensor = _tf_to_tensor(test_func_values)
+        self.test_func_values: torch.Tensor = _tf_to_tensor(
+            test_func_values.transpose("tf_idx", ...)
+        )
 
         self.d1test_func_values: Union[None, torch.Tensor] = _dtf_to_tensor(
-            d1test_func_values
+            d1test_func_values.transpose("tf_idx", ...)
         )
 
         self.d2test_func_values: Union[None, xr.DataArray] = _dtf_to_tensor(
-            d2test_func_values
+            d2test_func_values.transpose("tf_idx", ...)
         )
 
         self.d1test_func_values_boundary: torch.Tensor = torch.from_numpy(
-            d1test_func_values_boundary.to_array().squeeze().data
+            d1test_func_values_boundary.transpose("tf_idx", ...)
+            .to_array()
+            .squeeze()
+            .data
         ).float()
 
-        self.weights = torch.stack(
-            [
-                weight_function(np.array(idx))
-                for idx in test_func_values.coords["tf_idx"].data
-            ]
+        self.weights = torch.reshape(
+            torch.stack(
+                [
+                    weight_function(np.array(idx))
+                    for idx in test_func_values.coords["tf_idx"].data
+                ]
+            ),
+            (-1, 1),
         )
 
     def epoch(
@@ -267,8 +275,11 @@ class VPINN:
         self.neural_net.optimizer.zero_grad()
 
         # Calculate the boundary loss
-        boundary_loss = torch.nn.functional.mse_loss(
-            self.neural_net.forward(self.grid_boundary), self.training_data
+        boundary_loss = torch.sum(
+            torch.square(
+                self.neural_net.forward(self.grid_boundary) - self.training_data
+            ),
+            dim=0,
         )
 
         variational_loss = self.neural_net.variational_loss(
@@ -283,7 +294,6 @@ class VPINN:
             self.d2test_func_values,
             self.d1test_func_values_boundary,
         )
-
         loss = (
             boundary_loss_weight * boundary_loss
             + variational_loss_weight * variational_loss
@@ -295,9 +305,11 @@ class VPINN:
         self.neural_net.optimizer.step()
 
         # Track loss values
-        self.current_loss = loss.clone().detach().cpu().numpy()
-        self.current_boundary_loss = boundary_loss.clone().detach().cpu().numpy()
-        self.current_variational_loss = variational_loss.clone().detach().cpu().numpy()
+        self.current_loss = loss.clone().detach().cpu().numpy().item()
+        self.current_boundary_loss = boundary_loss.clone().detach().cpu().numpy().item()
+        self.current_variational_loss = (
+            variational_loss.clone().detach().cpu().numpy().item()
+        )
 
         # Write the data
         self.write_data()
