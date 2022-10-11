@@ -7,7 +7,7 @@ parameter_space:
     space:
       dimension: 2
       boundary:
-        x: [-1, 1]
+        x: [-2, 4]
         y: [0, 2]
       grid_size:
         x: 100
@@ -21,7 +21,13 @@ parameter_space:
         x: 10
         y: 10
       weight_function: exponential
+    variational_form: 1
+    NeuralNet:
+      num_layers: 2
+      activation_funcs:
+        0: relu
+        1: relu
+        -1: None
     predictions_grid:
       grid_size:
         x: 100
-        size: 100
