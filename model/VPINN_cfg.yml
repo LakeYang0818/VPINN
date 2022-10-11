@@ -51,7 +51,7 @@ test_functions:
 NeuralNet:
   num_layers: !is-positive-int 4
   nodes_per_layer: !is-positive-int 20
-  activation_funcs: sin
+  activation_funcs: tanh
   optimizer: !param
     default: Adam
     is_any_of: [Adagrad, Adam, AdamW, SparseAdam, Adamax, ASGD, LBFGS, NAdam, RAdam, RMSprop, Rprop, SGD]

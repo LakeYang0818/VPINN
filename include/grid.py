@@ -87,7 +87,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
         )
 
         return xarray.Dataset(
-            coords=dict(idx=("idx", [0, 1]), variable=("variable", [x, "normal_x"])),
+            coords=dict(idx=("idx", [0, 1]), variable=("variable", [x, "normals_x"])),
             data_vars=dict(data=(["idx", "variable"], [[x_0, -1], [x_1, +1]])),
             attrs=grid.attrs,
         )

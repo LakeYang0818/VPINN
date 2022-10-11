@@ -2,33 +2,32 @@
 paths:
   model_note: Burger1+1D
 parameter_space:
-  num_epochs: 400
+  num_epochs: 10000
   VPINN:
     space:
       x:
-        extent: [-1, 1]
-        size: 10
+        extent: [-2, 4]
+        size: 300
       y:
         extent: [0, 2]
-        size: 10
+        size: 80
     PDE:
       function: Burger1+1D
       type: Burger
     test_functions:
-      type: Sine
+      type: Legendre
       num_functions:
         n_x:
-          size: 3
+          size: 15
         n_y:
-          size: 3
+          size: 10
       weight_function: exponential
     NeuralNet:
+      num_layers: 2
       activation_funcs:
-        1: sin
-        2: sin
-        3: sin
-        4: sin
-        5: abs
+        0: relu
+        1: relu
+        -1: None
     variational_form: 1
     Training:
       boundary: lower

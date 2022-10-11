@@ -95,7 +95,6 @@ test_functions:
   select:
     data: data/test_function_values
   row: n_x
-  col: n_y
 
 # Plot the first derivative of the test functions
 d1_test_functions:
@@ -112,11 +111,11 @@ d2_test_functions:
 
 # Plot the grid
 grid:
-  based_on: grid2d
+  based_on: grid1d
 
 # Plot the solution on the boundary
 grid_boundary:
-  based_on: grid_boundary2d
+  based_on: grid_boundary1d
   cmap:
     from_values:
       -1: *darkblue

@@ -21,7 +21,6 @@ def integrate(
     :param func_2: the function values on the domain. If none are passed, the function returns the integral of
         the function over the domain
     :param domain_density: the density of the grid
-    :param requires_grad: whether the return values requires differentiation.
     :return: the value of the integral
     """
     if func_2 is None:
@@ -56,6 +55,6 @@ def integrate_xr(
     """Integrate a function over the interior of the grid"""
 
     # TODO use weights
-    return test_function_values.attrs["grid_density"] * (f * test_function_values).isel(
+    return test_function_values.attrs["grid_density"] * (test_function_values * f).isel(
         {val: slice(1, -1) for val in test_function_values.attrs["space_dimensions"]}
     ).sum(test_function_values.attrs["space_dimensions"])
