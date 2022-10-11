@@ -15,10 +15,6 @@ predictions:
   select:
     data: VPINN/predictions
 
-solution:
-  based_on: heatmap
-  select:
-    data: VPINN/u_exact
 loss:
   based_on: loss
   helpers:
@@ -32,34 +28,33 @@ grid_boundary:
   based_on: grid_boundary2d
 
 boundary_conditions:
-  based_on: grid_boundary2d
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.scatter
   select:
     vals: data/u_exact_boundary
   transform:
-    - .isel: [ !dag_prev , { variable: 0 } ]
+    - .sel: [!dag_tag vals , {'variable': 'x'}]
       kwargs:
-        drop: true
-      tag: dim1
-    - .isel: [ !dag_tag vals, { variable: 1 } ]
+        drop: True
+      tag: x
+    - .sel: [!dag_tag vals , {'variable': 'u'}]
       kwargs:
-        drop: true
-      tag: dim2
-    - .sel: [ !dag_tag vals, { variable: 'u' } ]
-      kwargs:
-        drop: true
+        drop: True
       tag: u
     - xr.Dataset:
-      - dim1: !dag_tag dim1
-        dim2: !dag_tag dim2
+      - x: !dag_tag x
         u: !dag_tag u
       tag: data
+  x: x
+  y: u
   hue: u
-#  cmap:
-#    continuous: true
-#    from_values:
-#      0: *darkblue
-#      0.5: *yellow
-#      1: *red
+  cmap:
+    continuous: true
+    from_values:
+      0: *darkblue
+      0.5: *yellow
+      1: *red
 
 test_functions:
   based_on: heatmap

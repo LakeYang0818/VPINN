@@ -113,6 +113,7 @@ def get_data(
         test_function_values = base.tf_grid_evaluation(
             tf_grid, test_function_indices, type=test_func_dict["type"], d=0
         )
+
         log.note("   Evaluated the test functions.")
         data["test_func_values"] = test_function_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
@@ -122,6 +123,7 @@ def get_data(
         d1test_func_values = base.tf_grid_evaluation(
             tf_grid, test_function_indices, type=test_func_dict["type"], d=1
         )
+
         data["d1test_func_values"] = d1test_func_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
         )
@@ -135,7 +137,7 @@ def get_data(
         )
         data["d1test_func_values_boundary"] = d1test_func_values_boundary.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
-        )
+        ).transpose("tf_idx", ...)
 
         log.debug("   Evaluating test function second derivatives on grid ... ")
         d2test_func_values = base.tf_grid_evaluation(
@@ -247,22 +249,22 @@ def get_data(
         # Store the first derivatives of the test function values
         dset_d1_test_func_vals = data_group.create_dataset(
             "d1_test_function_values",
-            test_function_values.shape,
-            maxshape=test_function_values.shape,
+            d1test_func_values.shape,
+            maxshape=d1test_func_values.shape,
             chunks=True,
             compression=3,
         )
-        dset_d1_test_func_vals.attrs["dim_names"] = list(test_function_values.sizes)
+        dset_d1_test_func_vals.attrs["dim_names"] = list(d1test_func_values.sizes)
 
         # Store the second derivatives of the test function values
         dset_d2_test_func_vals = data_group.create_dataset(
             "d2_test_function_values",
-            test_function_values.shape,
-            maxshape=test_function_values.shape,
+            d2test_func_values.shape,
+            maxshape=d2test_func_values.shape,
             chunks=True,
             compression=3,
         )
-        dset_d2_test_func_vals.attrs["dim_names"] = list(test_function_values.sizes)
+        dset_d2_test_func_vals.attrs["dim_names"] = list(d2test_func_values.sizes)
 
         # Set attributes
         for idx in list(test_function_values.sizes):
@@ -274,12 +276,12 @@ def get_data(
             dset_d1_test_func_vals.attrs["coords_mode__" + str(idx)] = "values"
             dset_d1_test_func_vals.attrs[
                 "coords__" + str(idx)
-            ] = test_function_values.coords[idx].data
+            ] = d1test_func_values.coords[idx].data
 
             dset_d2_test_func_vals.attrs["coords_mode__" + str(idx)] = "values"
             dset_d2_test_func_vals.attrs[
                 "coords__" + str(idx)
-            ] = test_function_values.coords[idx].data
+            ] = d2test_func_values.coords[idx].data
 
         # Write the data
         dset_test_func_vals[

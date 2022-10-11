@@ -7,10 +7,10 @@ parameter_space:
     space:
       x:
         extent: [-1, 1]
-        size: 100
+        size: 10
       y:
         extent: [0, 2]
-        size: 80
+        size: 10
     PDE:
       function: Burger1+1D
       type: Burger
@@ -18,9 +18,9 @@ parameter_space:
       type: Sine
       num_functions:
         n_x:
-          size: 20
+          size: 3
         n_y:
-          size: 20
+          size: 3
       weight_function: exponential
     NeuralNet:
       activation_funcs:

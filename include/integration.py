@@ -8,12 +8,11 @@ import xarray as xr
 
 
 def integrate(
-    func_1: Any,
-    func_2: Any = None,
+    func_1: torch.Tensor,
+    func_2: torch.Tensor = None,
     *,
-    domain_density: float = 1,
-    as_tensor: bool = True,
-    requires_grad: bool = False,
+    domain_density: torch.Tensor,
+    requires_grad: bool = True,
 ):
     """
     Integrates a function against another function over a domain, using simple quadrature. If the second function
@@ -22,13 +21,12 @@ def integrate(
     :param func_2: the function values on the domain. If none are passed, the function returns the integral of
         the function over the domain
     :param domain_density: the density of the grid
-    :param as_tensor: whether to return the values as a torch.Tensor
     :param requires_grad: whether the return values requires differentiation.
     :return: the value of the integral
     """
     if func_2 is None:
 
-        func_2 = torch.ones_like(func_1) if as_tensor else np.ones_like(func_1)
+        func_2 = torch.ones_like(func_1)
 
     elif len(np.shape(func_1)) != len(np.shape(func_2)):
         raise ValueError(
@@ -36,38 +34,20 @@ def integrate(
             f"dimensions {len(np.shape(func_1))} and {len(np.shape(func_2))}."
         )
 
-    if not as_tensor:
-        if len(np.shape(func_1)) == 1 or np.shape(func_1)[-1] == 1:
+    # scalar case
+    if len(func_1.size()) == 1 or func_1.size()[-1] == 1:
 
-            return domain_density * np.einsum("i..., i...->...", func_1, func_2)
+        return domain_density * torch.einsum("i..., i...->...", func_1, func_2)
 
-        elif np.shape(func_1)[-1] == 2:
-            return domain_density * np.einsum("ij..., ij...->...", func_1, func_2)
+    # vector-valued case: dot product
 
-    else:
+    elif func_1.size()[-1] == 2:
 
-        # scalar case
-        if len(func_1.size()) == 1 or func_1.size()[-1] == 1:
-
-            res = domain_density * torch.einsum("i..., i...->...", func_1, func_2)
-
-        # vector valued case
-        elif func_1.size()[-1] == 2:
-
-            res = (
-                domain_density
-                * len(func_2)
-                * torch.einsum("ij..., ij...->...", func_1, func_2)
-            )
-
-        if isinstance(res, torch.Tensor):
-
-            return torch.reshape(res, (-1, 1))
-        else:
-
-            return torch.reshape(
-                torch.tensor(res, dtype=torch.float, requires_grad=requires_grad), (1,)
-            )
+        return torch.sum(
+            domain_density * torch.einsum("ij..., ij...->i...", func_1, func_2),
+            dim=-1,
+            keepdim=True,
+        )
 
 
 def integrate_xr(

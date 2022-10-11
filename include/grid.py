@@ -87,7 +87,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
         )
 
         return xarray.Dataset(
-            coords=dict(idx=("idx", [0, 1]), variable=("variable", [x, "n"])),
+            coords=dict(idx=("idx", [0, 1]), variable=("variable", [x, "normal_x"])),
             data_vars=dict(data=(["idx", "variable"], [[x_0, -1], [x_1, +1]])),
             attrs=grid.attrs,
         )
@@ -98,7 +98,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
         x, y = grid.attrs["space_dimensions"]
         len_x, len_y = len(grid.coords[x].data), len(grid.coords[y].data)
 
-        x_vals = y_vals = n_vals = np.array([])
+        x_vals = y_vals = n_vals_x = n_vals_y = np.array([])
 
         # Bottom and top boundaries
         for i in [0, -1]:
@@ -107,7 +107,8 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
                 grid.coords[x].data[slice(1, None) if i == 0 else slice(None, -1)],
             )
             y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[i], len_x - 1))
-            n_vals = np.append(n_vals, np.repeat(1 if i == 0 else i, len_x - 1))
+            n_vals_x = np.append(n_vals_x, np.repeat(0, len_x - 1))
+            n_vals_y = np.append(n_vals_y, np.repeat(-1 if i == 0 else 1, len_x - 1))
 
         # Left and right boundaries
         for i in [0, -1]:
@@ -116,15 +117,19 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
                 grid.coords[y].data[slice(1, -1) if i == 0 else slice(None, None)],
             )
             x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[i], len_y - 1))
-            n_vals = np.append(n_vals, np.repeat(1 if i == -1 else -1, len_y - 1))
+            n_vals_x = np.append(n_vals_x, np.repeat(-1 if i == 0 else 1, len_y - 1))
+            n_vals_y = np.append(n_vals_y, np.repeat(0, len_y - 1))
 
         return xarray.Dataset(
             coords=dict(
                 idx=("idx", np.arange(0, len(x_vals), 1)),
-                variable=("variable", [x, y, "n"]),
+                variable=("variable", [x, y, "normals_x", "normals_y"]),
             ),
             data_vars=dict(
-                data=(["idx", "variable"], np.stack([x_vals, y_vals, n_vals], axis=1))
+                data=(
+                    ["idx", "variable"],
+                    np.stack([x_vals, y_vals, n_vals_x, n_vals_y], axis=1),
+                )
             ),
             attrs=grid.attrs,
         )
@@ -137,7 +142,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
             len(grid.coords[z].data),
         )
 
-        x_vals = y_vals = z_vals = n_vals = np.array([])
+        x_vals = y_vals = z_vals = n_vals_x = n_vals_y = n_vals_z = np.array([])
 
         # Bottom and top boundaries
         for i in [0, -1]:
@@ -147,7 +152,11 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
             z_vals = np.append(
                 z_vals, np.repeat(grid.coords[z].data[i], (len_x) * (len_y))
             )
-            n_vals = np.append(n_vals, np.repeat(1 if i == 0 else i, (len_x) * (len_y)))
+            n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x) * (len_y)))
+            n_vals_y = np.append(n_vals_y, np.repeat(0, (len_x) * (len_y)))
+            n_vals_z = np.append(
+                n_vals_z, np.repeat(-1 if i == 0 else 1, (len_x) * (len_y))
+            )
 
         # Left and right boundaries
         for i in [0, -1]:
@@ -157,9 +166,11 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
             x_vals = np.append(
                 x_vals, np.repeat(grid.coords[x].data[i], (len_y) * (len_z - 2))
             )
-            n_vals = np.append(
-                n_vals, np.repeat(1 if i == -1 else -1, (len_y) * (len_z - 2))
+            n_vals_x = np.append(
+                n_vals_x, np.repeat(-1 if i == 0 else 1, (len_x) * (len_y))
             )
+            n_vals_y = np.append(n_vals_y, np.repeat(0, (len_x) * (len_y)))
+            n_vals_z = np.append(n_vals_z, np.repeat(0, (len_x) * (len_y)))
 
         # Front and back boundaries
         for i in [0, -1]:
@@ -169,19 +180,23 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
             y_vals = np.append(
                 y_vals, np.repeat(grid.coords[y].data[i], (len_x - 2) * (len_z - 2))
             )
-            n_vals = np.append(
-                n_vals, np.repeat(1 if i == -1 else -1, (len_x - 2) * (len_z - 2))
+            n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x) * (len_y)))
+            n_vals_y = np.append(
+                n_vals_y, np.repeat(-1 if i == 0 else 1, (len_x) * (len_y))
             )
+            n_vals_z = np.append(n_vals_z, np.repeat(0, (len_x) * (len_y)))
 
         return xarray.Dataset(
             coords=dict(
                 idx=("idx", np.arange(0, len(x_vals), 1)),
-                variable=("variable", [x, y, z, "n"]),
+                variable=("variable", [x, y, z, "normals_x", "normals_y", "normals_z"]),
             ),
             data_vars=dict(
                 data=(
                     ["idx", "variable"],
-                    np.stack([x_vals, y_vals, z_vals, n_vals], axis=1),
+                    np.stack(
+                        [x_vals, y_vals, z_vals, n_vals_x, n_vals_y, n_vals_z], axis=1
+                    ),
                 )
             ),
             attrs=grid.attrs,

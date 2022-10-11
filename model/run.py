@@ -77,6 +77,73 @@ class VPINN:
             weight_function (callable, optional): a function to use to weight the test functions
             **__: other arguments are ignored
         """
+
+        def _tf_to_tensor(test_funcs: xr.DataArray) -> Union[None, torch.Tensor]:
+
+            """Unpacks a DataArray of test function values and returns a stacked torch.Tensor. Shape of the
+            output is given by: [test function multi-index, coordinate-multi-index, 1]"""
+
+            if test_funcs is None:
+                return None
+
+            return torch.reshape(
+                torch.from_numpy(
+                    test_funcs.isel(
+                        {
+                            var: slice(1, -1)
+                            for var in test_funcs.attrs["space_dimensions"]
+                        }
+                    ).data
+                ),
+                (len(test_funcs.coords["tf_idx"]), -1, 1),
+            ).float()
+
+        def _dtf_to_tensor(
+            test_funcs: xr.DataArray = None,
+        ) -> Union[None, torch.Tensor]:
+
+            """Unpacks a DataArray of test function derivatives and returns a stacked torch.Tensor"""
+
+            if test_funcs is None:
+                return None
+
+            return torch.reshape(
+                torch.from_numpy(
+                    test_funcs.isel(
+                        {
+                            var: slice(1, -1)
+                            for var in test_funcs.attrs["space_dimensions"]
+                        }
+                    ).data
+                ),
+                (
+                    len(test_funcs.coords["tf_idx"]),
+                    -1,
+                    test_funcs.attrs["grid_dimension"],
+                ),
+            ).float()
+
+        def _get_normals(ds: xr.Dataset = None) -> Union[None, torch.Tensor]:
+
+            """Unpacks the Dataset containing the grid normals and returns a stacked torch.Tensor"""
+
+            if ds is None:
+                return None
+
+            res = []
+            for dim in ds.attrs["space_dimensions"]:
+                res.append(
+                    torch.from_numpy(
+                        training_data.sel(
+                            variable=["normals_" + str(dim)], drop=True
+                        ).data.to_numpy()
+                    ).float()
+                )
+
+            return torch.reshape(
+                torch.stack(res, dim=1), (-1, ds.attrs["grid_dimension"])
+            )
+
         self._name = name
         self._time = 0
         self._h5group = h5group
@@ -147,11 +214,10 @@ class VPINN:
         )
 
         # The grid normals
-        self.grid_normals: torch.Tensor = (
-            torch.from_numpy(training_data.sel(variable=["n"]).data.to_numpy())
-            .float()
-            .to(device)
-        )
+        self.grid_normals: torch.Tensor = _get_normals(training_data).to(device)
+
+        # The density of the grid
+        self.domain_density = grid.attrs["grid_density"]
 
         # Training data (boundary conditions)
         self.training_data: torch.Tensor = (
@@ -163,36 +229,24 @@ class VPINN:
         )
 
         # Value of the external function integrated against all the test functions
-        self.f_integrated: xr.DataArray = f_integrated
+        self.f_integrated: torch.Tensor = torch.reshape(
+            torch.from_numpy(f_integrated.data), (-1, 1)
+        )
 
-        # Values of the test functions and their derivatives on the grid interior
-        # TODO: transform to tensor here?
-        self.test_func_values: xr.DataArray = test_func_values.isel(
-            {var: slice(1, -1) for var in test_func_values.attrs["space_dimensions"]}
+        # Test function values on the grid interior, indexed by their (multi-)index and grid coordinate
+        self.test_func_values: torch.Tensor = _tf_to_tensor(test_func_values)
+
+        self.d1test_func_values: Union[None, torch.Tensor] = _dtf_to_tensor(
+            d1test_func_values
         )
-        self.d1test_func_values: Union[None, xr.DataArray] = (
-            d1test_func_values.isel(
-                {
-                    var: slice(1, -1)
-                    for var in test_func_values.attrs["space_dimensions"]
-                }
-            )
-            if d1test_func_values is not None
-            else None
+
+        self.d2test_func_values: Union[None, xr.DataArray] = _dtf_to_tensor(
+            d2test_func_values
         )
-        self.d2test_func_values: Union[None, xr.DataArray] = (
-            d2test_func_values.isel(
-                {
-                    var: slice(1, -1)
-                    for var in test_func_values.attrs["space_dimensions"]
-                }
-            )
-            if d2test_func_values is not None
-            else None
-        )
-        self.d1test_func_values_boundary: Union[
-            None, xr.DataArray
-        ] = d1test_func_values_boundary.to_array()
+
+        self.d1test_func_values_boundary: torch.Tensor = torch.from_numpy(
+            d1test_func_values_boundary.to_array().squeeze().data
+        ).float()
 
         self.weights = torch.stack(
             [
@@ -224,6 +278,7 @@ class VPINN:
             self.f_integrated,
             self.test_func_values,
             self.weights,
+            self.domain_density,
             self.d1test_func_values,
             self.d2test_func_values,
             self.d1test_func_values_boundary,
@@ -233,6 +288,7 @@ class VPINN:
             boundary_loss_weight * boundary_loss
             + variational_loss_weight * variational_loss
         )
+
         loss.backward()
 
         # Adjust the model parameters
@@ -275,7 +331,7 @@ if __name__ == "__main__":
     log.note(f"   Loading config file:\n        {cfg_file_path}")
     with open(cfg_file_path, "r") as cfg_file:
         cfg = yaml.load(cfg_file, Loader=yaml.Loader)
-    model_name = cfg.get("root_model_name", "SIR")
+    model_name = cfg.get("root_model_name", "VPINN")
     log.note(f"   Model name:  {model_name}")
     model_cfg = cfg[model_name]
 
@@ -369,7 +425,7 @@ if __name__ == "__main__":
         if _ % 100 == 0:
             log.progress(
                 f"   Completed epoch {_} / {num_epochs}; "
-                f"   current loss: {model.current_loss[0]}"
+                f"   current loss: {model.current_loss}"
             )
 
     log.info("   Simulation run finished. Generating prediction ...")

@@ -6,50 +6,76 @@ from ..integration import integrate
 
 
 def Burger(
-    u, du, grid, f_integrated, test_func_vals, d1test_func_vals, var_form, pde_constants
-):
+    u: callable,
+    du: callable,
+    grid: torch.Tensor,
+    grid_density: torch.Tensor,
+    f_integrated: torch.Tensor,
+    d1test_func_vals: torch.Tensor,
+    tf_weights: torch.Tensor,
+    nu: float,
+) -> torch.Tensor:
+
+    """Calculates the variational loss for Burger's equation.
+
+    :param u: the neural network itself
+    :param du: its first derivative
+    :param grid: the grid over which to integrate
+    :param grid_density: the grid density
+    :param f_integrated: the values of the external function integrated against every test function over the grid
+    :param d1test_func_vals: the values of the test function derivatives on the grid interior
+    :param tf_weights: the weights used for each test function
+    :param grid_boundary: the boundary of the grid
+    :param normals: the normals of the grid boundary
+    :param d1test_func_vals: the test functions' first derivatives
+    :return: the variational loss
+    """
 
     # Track the variational loss
     loss_v = torch.tensor(0.0, requires_grad=True)
 
-    nu = pde_constants["Burger"]
+    # Evaluate the neural net on the grid
+    u = u(grid)
 
-    if var_form == 1:
+    # Calculate partial derivatives
+    u_vec = torch.reshape(torch.stack([0.5 * torch.pow(u, 2), u], dim=1), (len(u), 2))
+    du_x = torch.swapaxes(du(u, requires_grad=True), 0, 1)[0] if nu != 0 else None
 
-        u = u(grid)
-        u_vec = torch.reshape(
-            torch.stack([0.5 * torch.pow(u, 2), u], dim=1), (len(u), 2)
+    if nu != 0:
+
+        integrals = torch.stack(
+            [
+                integrate(
+                    u_vec,
+                    d1test_func_vals[_],
+                    domain_density=grid_density,
+                )
+                - nu
+                * integrate(
+                    du_x,
+                    torch.transpose(d1test_func_vals[_], 0, 1)[0],
+                    domain_density=grid_density,
+                )
+                for _ in range(len(d1test_func_vals))
+            ]
         )
-        du_x = torch.swapaxes(du(u, requires_grad=True), 0, 1)[0] if nu != 0 else None
 
-        for idx in range(len(f_integrated.coords["tf_idx"])):
-
-            tf_vals = torch.reshape(
-                torch.from_numpy(d1test_func_vals.isel(tf_idx=[idx]).data).float(),
-                (-1, 1),
-            )
-
-            if nu != 0:
-                loss_v = loss_v + torch.square(
-                    integrate(
-                        u_vec,
-                        tf_vals,
-                        domain_density=test_func_vals.attrs["grid_density"],
-                    )
-                    - nu
-                    * integrate(
-                        du_x,
-                        torch.transpose(tf_vals, 0, 1)[0],
-                        domain_density=test_func_vals.attrs["grid_density"],
-                    )
+    else:
+        integrals = torch.stack(
+            [
+                integrate(
+                    u_vec,
+                    d1test_func_vals[_],
+                    domain_density=grid_density,
                 )
-            else:
-                loss_v = loss_v + torch.square(
-                    integrate(
-                        u_vec,
-                        tf_vals,
-                        domain_density=test_func_vals.attrs["grid_density"],
-                    )
-                )
+                for _ in range(len(d1test_func_vals))
+            ]
+        )
 
-    return loss_v / f_integrated.size
+    # Multiply each integral with the weight accorded each test function and calculate the mean squared error
+    # For the first variational form, there is a sign flip in the equation
+    loss_v = loss_v + torch.nn.functional.mse_loss(
+        integrals * tf_weights, -1 * f_integrated * tf_weights
+    )
+
+    return loss_v
