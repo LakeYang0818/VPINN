@@ -2,7 +2,7 @@
 paths:
   model_note: Poisson2D
 parameter_space:
-  num_epochs: 1000
+  num_epochs: 5000
   VPINN:
     space:
       x:
@@ -10,9 +10,9 @@ parameter_space:
         size: 10
       y:
         extent: [-1, 1]
-        size: 10
+        size: 30
     PDE:
-      function: Tanh2D
+      function: SinSin2D
       type: Poisson
     test_functions:
       type: Legendre
@@ -21,8 +21,17 @@ parameter_space:
           size: 10
         n_y:
           size: 10
-      weight_function: exponential
-    variational_form: 2
+      weight_function: uniform
+    variational_form: 1
+    NeuralNet:
+      num_layers: 4
+      nodes_per_layer: 20
+      activation_funcs:
+        0: tanh
+        1: tanh
+        2: tanh
+        3: tanh
+        4: None
     predictions_grid:
       x:
         size: 100

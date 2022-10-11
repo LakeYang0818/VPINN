@@ -64,7 +64,10 @@ boundary_conditions:
 test_functions:
   based_on: heatmap
   select:
-    data: data/test_function_values
+    data:
+      path: data/test_function_values
+      transform:
+        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [4]}]
   row: n_x
   col: n_y
 
@@ -75,7 +78,7 @@ d1test_functions_x:
     data:
       path: data/d1_test_function_values
       transform:
-        - .sel: [!dag_prev , {'idx': 0}]
+        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [4], idx: 0}]
   row: n_x
   col: n_y
   cbar_kwargs:
@@ -88,7 +91,7 @@ d1test_functions_y:
     data:
       path: data/d1_test_function_values
       transform:
-        - .sel: [!dag_prev , {'idx': 1}]
+        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [4], idx: 1}]
   row: n_x
   col: n_y
   cbar_kwargs:

@@ -44,7 +44,5 @@ EXAMPLES = {
 # Dictionary of weight functions
 WEIGHT_FUNCTIONS = {
     "uniform": lambda x: torch.tensor(1.0, dtype=torch.float64),
-    "exponential": lambda x: torch.tensor(
-        2.0 ** (-x[0]) * 2.0 ** (-x[1]), dtype=torch.float64
-    ),
+    "exponential": lambda x: torch.tensor(2.0 ** (-sum(x)), dtype=torch.float64),
 }
