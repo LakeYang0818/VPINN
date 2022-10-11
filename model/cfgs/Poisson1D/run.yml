@@ -1,6 +1,6 @@
 ---
 paths:
-  model_note: Poisson2D
+  model_note: Poisson1D
 parameter_space:
   num_epochs: 5000
   VPINN:
