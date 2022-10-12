@@ -6,6 +6,7 @@ from ..integration import integrate
 
 
 def Burger(
+    device: str,
     u: callable,
     du: callable,
     grid: torch.Tensor,
@@ -18,6 +19,7 @@ def Burger(
 
     """Calculates the variational loss for Burger's equation.
 
+    :param device: the training device to use
     :param u: the neural network itself
     :param du: its first derivative
     :param grid: the grid over which to integrate
@@ -32,14 +34,20 @@ def Burger(
     """
 
     # Track the variational loss
-    loss_v = torch.tensor(0.0, requires_grad=True)
+    loss_v = torch.tensor(0.0, requires_grad=True).to(device)
 
     # Evaluate the neural net on the grid
     u = u(grid)
 
     # Calculate partial derivatives
-    u_vec = torch.reshape(torch.stack([0.5 * torch.pow(u, 2), u], dim=1), (len(u), 2))
-    du_x = torch.swapaxes(du(u, requires_grad=True), 0, 1)[0] if nu != 0 else None
+    u_vec = torch.reshape(
+        torch.stack([0.5 * torch.pow(u, 2), u], dim=1), (len(u), 2)
+    ).to(device)
+    du_x = (
+        torch.swapaxes(du(u, requires_grad=True), 0, 1)[0].to(device)
+        if nu != 0
+        else None
+    )
 
     if nu != 0:
 

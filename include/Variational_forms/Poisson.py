@@ -6,6 +6,7 @@ from ..integration import integrate
 
 
 def Poisson(
+    device: str,
     variational_form: int,
     u: callable,
     du: callable,
@@ -24,6 +25,7 @@ def Poisson(
 
     """Calculates the variational loss for the Poisson equation.
 
+    :param device: the training device to use
     :param variational_form: the variational form to use
     :param u: the neural network itself
     :param du: its first derivative
@@ -42,7 +44,7 @@ def Poisson(
     """
 
     # Track the variational loss
-    loss_v = torch.tensor([0.0], requires_grad=True)
+    loss_v = torch.tensor([0.0], requires_grad=True).to(device)
 
     if variational_form == 0:
 

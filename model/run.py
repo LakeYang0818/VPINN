@@ -86,17 +86,21 @@ class VPINN:
             if test_funcs is None:
                 return None
 
-            return torch.reshape(
-                torch.from_numpy(
-                    test_funcs.isel(
-                        {
-                            var: slice(1, -1)
-                            for var in test_funcs.attrs["space_dimensions"]
-                        }
-                    ).data
-                ),
-                (len(test_funcs.coords["tf_idx"]), -1, 1),
-            ).float()
+            return (
+                torch.reshape(
+                    torch.from_numpy(
+                        test_funcs.isel(
+                            {
+                                var: slice(1, -1)
+                                for var in test_funcs.attrs["space_dimensions"]
+                            }
+                        ).data
+                    ),
+                    (len(test_funcs.coords["tf_idx"]), -1, 1),
+                )
+                .float()
+                .to(device)
+            )
 
         def _dtf_to_tensor(
             test_funcs: xr.DataArray = None,
@@ -107,21 +111,25 @@ class VPINN:
             if test_funcs is None:
                 return None
 
-            return torch.reshape(
-                torch.from_numpy(
-                    test_funcs.isel(
-                        {
-                            var: slice(1, -1)
-                            for var in test_funcs.attrs["space_dimensions"]
-                        }
-                    ).data
-                ),
-                (
-                    len(test_funcs.coords["tf_idx"]),
-                    -1,
-                    test_funcs.attrs["grid_dimension"],
-                ),
-            ).float()
+            return (
+                torch.reshape(
+                    torch.from_numpy(
+                        test_funcs.isel(
+                            {
+                                var: slice(1, -1)
+                                for var in test_funcs.attrs["space_dimensions"]
+                            }
+                        ).data
+                    ),
+                    (
+                        len(test_funcs.coords["tf_idx"]),
+                        -1,
+                        test_funcs.attrs["grid_dimension"],
+                    ),
+                )
+                .float()
+                .to(device)
+            )
 
         def _get_normals(ds: xr.Dataset = None) -> Union[None, torch.Tensor]:
 
@@ -142,14 +150,15 @@ class VPINN:
 
             return torch.reshape(
                 torch.stack(res, dim=1), (-1, ds.attrs["grid_dimension"])
-            )
+            ).to(device)
 
         self._name = name
         self._time = 0
         self._h5group = h5group
         self._rng = rng
+        self.device = device
 
-        self.neural_net = neural_net
+        self.neural_net = neural_net.to(device)
         self.neural_net.optimizer.zero_grad()
         self.current_loss = torch.tensor(0.0)
         self.current_boundary_loss = torch.tensor(0.0)
@@ -230,8 +239,8 @@ class VPINN:
 
         # Value of the external function integrated against all the test functions
         self.f_integrated: torch.Tensor = torch.reshape(
-            torch.from_numpy(f_integrated.data), (-1, 1)
-        )
+            torch.from_numpy(f_integrated.data).float(), (-1, 1)
+        ).to(device)
 
         # Test function values on the grid interior, indexed by their (multi-)index and grid coordinate
         self.test_func_values: torch.Tensor = _tf_to_tensor(
@@ -246,21 +255,29 @@ class VPINN:
             d2test_func_values.transpose("tf_idx", ...)
         )
 
-        self.d1test_func_values_boundary: torch.Tensor = torch.from_numpy(
-            d1test_func_values_boundary.transpose("tf_idx", ...)
-            .to_array()
-            .squeeze()
-            .data
-        ).float()
+        self.d1test_func_values_boundary: torch.Tensor = (
+            torch.from_numpy(
+                d1test_func_values_boundary.transpose("tf_idx", ...)
+                .to_array()
+                .squeeze()
+                .data
+            )
+            .float()
+            .to(device)
+        )
 
-        self.weights = torch.reshape(
-            torch.stack(
-                [
-                    weight_function(np.array(idx))
-                    for idx in test_func_values.coords["tf_idx"].data
-                ]
-            ),
-            (-1, 1),
+        self.weights = (
+            torch.reshape(
+                torch.stack(
+                    [
+                        weight_function(np.array(idx))
+                        for idx in test_func_values.coords["tf_idx"].data
+                    ]
+                ),
+                (-1, 1),
+            )
+            .float()
+            .to(device)
         )
 
     def epoch(
@@ -283,6 +300,7 @@ class VPINN:
         )
 
         variational_loss = self.neural_net.variational_loss(
+            self.device,
             self.grid,
             self.grid_boundary,
             self.grid_normals,
@@ -393,7 +411,7 @@ if __name__ == "__main__":
         var_form=var_form,
         pde_constants=PDE_constants,
         **model_cfg["NeuralNet"],
-    ).to(device)
+    )
 
     test_func_dict = model_cfg["test_functions"]
 
@@ -447,10 +465,11 @@ if __name__ == "__main__":
         recursive_update(model_cfg["space"], model_cfg.get("predictions_grid", {}))
     )
 
+    # Generate predictions on cpu
+    net = net.to("cpu")
+
     predictions = xr.apply_ufunc(
-        lambda x: model.neural_net.forward(torch.from_numpy(x).float())
-        .detach()
-        .numpy(),
+        lambda x: net.forward(torch.tensor(x).float()).detach().numpy(),
         plot_grid,
         vectorize=True,
         input_core_dims=[["idx"]],

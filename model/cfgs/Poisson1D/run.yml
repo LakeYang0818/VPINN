@@ -19,12 +19,16 @@ parameter_space:
       weight_function: uniform
     variational_form: 0
     NeuralNet:
-      num_layers: 1
+      num_layers: 4
       nodes_per_layer: 20
       activation_funcs:
         0: tanh
-        1: None
+        1: tanh
+        2: tanh
+        3: tanh
+        4: linear
     Training:
+      device: mps
       learning_rate: 0.001
       variational_loss_weight: 20
     predictions_grid:

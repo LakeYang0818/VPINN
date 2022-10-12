@@ -56,11 +56,11 @@ class NeuralNet(nn.Module):
 
     EQUATION_TYPES = {
         "Burger",
-        "Helmholtz",
+        # "Helmholtz",
         "Poisson",
-        "PorousMedium",
-        "Burger",
-        "Weak1D",
+        # "PorousMedium",
+        # "Burger",
+        # "Weak1D",
     }
 
     # Torch optimizers
@@ -193,6 +193,7 @@ class NeuralNet(nn.Module):
 
     def variational_loss(
         self,
+        device,
         grid,
         grid_boundary,
         normals,
@@ -207,6 +208,7 @@ class NeuralNet(nn.Module):
 
         """Calculates the variational loss on the grid interior.
 
+        :param device: the training device
         :param grid: the grid
         :param grid_boundary: the grid boundary
         :param normals: the grid boundary normals
@@ -222,6 +224,7 @@ class NeuralNet(nn.Module):
         if self._eq_type == "Burger":
 
             return Burger(
+                device,
                 self.forward,
                 self.grad,
                 grid,
@@ -232,26 +235,27 @@ class NeuralNet(nn.Module):
                 self._pde_constants.get("Burger", 0),
             )
 
-        elif self._eq_type == "Helmholtz":
-
-            return Helmholtz(
-                self.forward,
-                self.grad,
-                self.gradgrad,
-                grid,
-                f_integrated,
-                test_func_vals,
-                d1test_func_vals,
-                d2test_func_vals,
-                d1test_func_vals_bd,
-                self._var_form,
-                self._pde_constants,
-                weight_function,
-            )
+        # elif self._eq_type == "Helmholtz":
+        #
+        #     return Helmholtz(
+        #         self.forward,
+        #         self.grad,
+        #         self.gradgrad,
+        #         grid,
+        #         f_integrated,
+        #         test_func_vals,
+        #         d1test_func_vals,
+        #         d2test_func_vals,
+        #         d1test_func_vals_bd,
+        #         self._var_form,
+        #         self._pde_constants,
+        #         weight_function,
+        #     )
 
         elif self._eq_type == "Poisson":
 
             return Poisson(
+                device,
                 self._var_form,
                 self.forward,
                 self.grad,
@@ -268,34 +272,34 @@ class NeuralNet(nn.Module):
                 d1test_func_vals_bd,
             )
 
-        elif self._eq_type == "PorousMedium":
+        # elif self._eq_type == "PorousMedium":
+        #
+        #     return PorousMedium(
+        #         self.forward,
+        #         self.grad,
+        #         grid,
+        #         f_integrated,
+        #         test_func_vals,
+        #         d1test_func_vals,
+        #         d2test_func_vals,
+        #         d1test_func_vals_bd,
+        #         self._var_form,
+        #         self._pde_constants,
+        #     )
 
-            return PorousMedium(
-                self.forward,
-                self.grad,
-                grid,
-                f_integrated,
-                test_func_vals,
-                d1test_func_vals,
-                d2test_func_vals,
-                d1test_func_vals_bd,
-                self._var_form,
-                self._pde_constants,
-            )
-
-        elif self._eq_type == "Weak1D":
-
-            return Weak1D(
-                self.forward,
-                grid,
-                f_integrated,
-                d1test_func_vals,
-                self._var_form,
-                weight_function,
-            )
+        # elif self._eq_type == "Weak1D":
+        #
+        #     return Weak1D(
+        #         self.forward,
+        #         grid,
+        #         f_integrated,
+        #         d1test_func_vals,
+        #         self._var_form,
+        #         weight_function,
+        #     )
 
         else:
-            raise ValueError(
-                f"Unrecognized equation type '{self._eq_type}'! "
+            raise NotImplementedError(
+                f"Equation '{self._eq_type}' not implemented! "
                 f"Choose from: {', '.join(self.EQUATION_TYPES)}"
             )

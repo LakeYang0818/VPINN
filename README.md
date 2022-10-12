@@ -247,9 +247,17 @@ The `boundary` entry sets the range of the `boundary` to use for training. It ca
 `right`, `front`, `back`) or an index range to select a specific section of the boundary.
 
 The `device` entry sets the training device. The default here is the `cpu`; you can set it to any
-supported pytorch training device. Make sure your platform is configured to support the selected device.
-On Apple Silicon, set the device to `mps` to enable GPU training, provided you have followed the corresponding
-installation instructions (see above).
+supported pytorch training device (e.g. `cuda` for most GPUs). Make sure your platform is configured to support the selected device.
+
+> **_Warning_**: On Apple Silicon, set the device to `mps` to enable GPU training, provided you have followed the corresponding
+> installation instructions (see above). However, training on `mps` is currently in beta, and many functions do net
+> have a gradient. You may therefore receive a runtime error of the kind
+>
+> ```RuntimeError: derivative for <function> is not implemented```
+>
+> Training on the GPU is still very much WIP. It is possible you will not see a performance increase, or even a
+> performance decline, as the loss calculation is very intensive, and pytorch does seem to have implemented
+> efficient eager execution on all GPUs.
 
 `utopya` automatically parallelises multiple runs; the number of CPU cores available to do this
 can be specified under `worker_managers/num_workers` on the root-level configuration (i.e. on the same level as
