@@ -156,8 +156,9 @@ class VPINN:
         self._time = 0
         self._h5group = h5group
         self._rng = rng
+        self.device = device
 
-        self.neural_net = neural_net
+        self.neural_net = neural_net.to(device)
         self.neural_net.optimizer.zero_grad()
         self.current_loss = torch.tensor(0.0)
         self.current_boundary_loss = torch.tensor(0.0)
@@ -299,6 +300,7 @@ class VPINN:
         )
 
         variational_loss = self.neural_net.variational_loss(
+            self.device,
             self.grid,
             self.grid_boundary,
             self.grid_normals,
@@ -408,9 +410,8 @@ if __name__ == "__main__":
         eq_type=eq_type,
         var_form=var_form,
         pde_constants=PDE_constants,
-        device=device,
         **model_cfg["NeuralNet"],
-    ).to(device)
+    )
 
     test_func_dict = model_cfg["test_functions"]
 
@@ -465,12 +466,10 @@ if __name__ == "__main__":
     )
 
     # Generate predictions on cpu
-    model.neural_net.to("cpu")
+    net = net.to("cpu")
 
     predictions = xr.apply_ufunc(
-        lambda x: model.neural_net.forward(torch.from_numpy(x).float())
-        .detach()
-        .numpy(),
+        lambda x: net.forward(torch.tensor(x).float()).detach().numpy(),
         plot_grid,
         vectorize=True,
         input_core_dims=[["idx"]],

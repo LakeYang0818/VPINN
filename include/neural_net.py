@@ -94,7 +94,6 @@ class NeuralNet(nn.Module):
         eq_type: str = "Poisson",
         var_form: int = 1,
         pde_constants: dict = None,
-        device: str = "cpu",
     ):
 
         """Initialises the neural net.
@@ -109,7 +108,6 @@ class NeuralNet(nn.Module):
         :param eq_type: the equation type of the PDE in question
         :param var_form: the variational form to use for the loss function
         :param pde_constants: the constants for the pde in use
-        :param device: the training device to use
         Raises:
             ValueError: if the equation type is unrecognized
             ValueError: if the variational form is unrecognized
@@ -159,8 +157,6 @@ class NeuralNet(nn.Module):
         # Get equation parameters
         self._pde_constants = pde_constants
 
-        self.device = device
-
     # ... Evaluation functions .........................................................................................
 
     # The model forward pass
@@ -197,6 +193,7 @@ class NeuralNet(nn.Module):
 
     def variational_loss(
         self,
+        device,
         grid,
         grid_boundary,
         normals,
@@ -211,6 +208,7 @@ class NeuralNet(nn.Module):
 
         """Calculates the variational loss on the grid interior.
 
+        :param device: the training device
         :param grid: the grid
         :param grid_boundary: the grid boundary
         :param normals: the grid boundary normals
@@ -226,7 +224,7 @@ class NeuralNet(nn.Module):
         if self._eq_type == "Burger":
 
             return Burger(
-                self.device,
+                device,
                 self.forward,
                 self.grad,
                 grid,
@@ -257,7 +255,7 @@ class NeuralNet(nn.Module):
         elif self._eq_type == "Poisson":
 
             return Poisson(
-                self.device,
+                device,
                 self._var_form,
                 self.forward,
                 self.grad,

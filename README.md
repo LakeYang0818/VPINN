@@ -254,6 +254,10 @@ supported pytorch training device (e.g. `cuda` for most GPUs). Make sure your pl
 > have a gradient. You may therefore receive a runtime error of the kind
 >
 > ```RuntimeError: derivative for <function> is not implemented```
+>
+> Training on the GPU is still very much WIP. It is possible you will not see a performance increase, or even a
+> performance decline, as the loss calculation is very intensive, and pytorch does seem to have implemented
+> efficient eager execution on all GPUs.
 
 `utopya` automatically parallelises multiple runs; the number of CPU cores available to do this
 can be specified under `worker_managers/num_workers` on the root-level configuration (i.e. on the same level as
