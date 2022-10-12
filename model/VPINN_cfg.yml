@@ -12,9 +12,9 @@ space:
 # PDE parameters .......................................................................................................
 PDE:
   type: !param
-    default: Poisson
+    default: Burger
     dtype: str
-    is_any_of: [Poisson, Burger, Helmholtz, Weak1D, PorousMedium]
+    is_any_of: [Poisson, Burger]
   function: !param
     default: Tanh
     dtype: str

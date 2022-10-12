@@ -56,11 +56,11 @@ class NeuralNet(nn.Module):
 
     EQUATION_TYPES = {
         "Burger",
-        "Helmholtz",
+        # "Helmholtz",
         "Poisson",
-        "PorousMedium",
-        "Burger",
-        "Weak1D",
+        # "PorousMedium",
+        # "Burger",
+        # "Weak1D",
     }
 
     # Torch optimizers
@@ -94,6 +94,7 @@ class NeuralNet(nn.Module):
         eq_type: str = "Poisson",
         var_form: int = 1,
         pde_constants: dict = None,
+        device: str = "cpu",
     ):
 
         """Initialises the neural net.
@@ -108,6 +109,7 @@ class NeuralNet(nn.Module):
         :param eq_type: the equation type of the PDE in question
         :param var_form: the variational form to use for the loss function
         :param pde_constants: the constants for the pde in use
+        :param device: the training device to use
         Raises:
             ValueError: if the equation type is unrecognized
             ValueError: if the variational form is unrecognized
@@ -156,6 +158,8 @@ class NeuralNet(nn.Module):
 
         # Get equation parameters
         self._pde_constants = pde_constants
+
+        self.device = device
 
     # ... Evaluation functions .........................................................................................
 
@@ -222,6 +226,7 @@ class NeuralNet(nn.Module):
         if self._eq_type == "Burger":
 
             return Burger(
+                self.device,
                 self.forward,
                 self.grad,
                 grid,
@@ -232,26 +237,27 @@ class NeuralNet(nn.Module):
                 self._pde_constants.get("Burger", 0),
             )
 
-        elif self._eq_type == "Helmholtz":
-
-            return Helmholtz(
-                self.forward,
-                self.grad,
-                self.gradgrad,
-                grid,
-                f_integrated,
-                test_func_vals,
-                d1test_func_vals,
-                d2test_func_vals,
-                d1test_func_vals_bd,
-                self._var_form,
-                self._pde_constants,
-                weight_function,
-            )
+        # elif self._eq_type == "Helmholtz":
+        #
+        #     return Helmholtz(
+        #         self.forward,
+        #         self.grad,
+        #         self.gradgrad,
+        #         grid,
+        #         f_integrated,
+        #         test_func_vals,
+        #         d1test_func_vals,
+        #         d2test_func_vals,
+        #         d1test_func_vals_bd,
+        #         self._var_form,
+        #         self._pde_constants,
+        #         weight_function,
+        #     )
 
         elif self._eq_type == "Poisson":
 
             return Poisson(
+                self.device,
                 self._var_form,
                 self.forward,
                 self.grad,
@@ -268,34 +274,34 @@ class NeuralNet(nn.Module):
                 d1test_func_vals_bd,
             )
 
-        elif self._eq_type == "PorousMedium":
+        # elif self._eq_type == "PorousMedium":
+        #
+        #     return PorousMedium(
+        #         self.forward,
+        #         self.grad,
+        #         grid,
+        #         f_integrated,
+        #         test_func_vals,
+        #         d1test_func_vals,
+        #         d2test_func_vals,
+        #         d1test_func_vals_bd,
+        #         self._var_form,
+        #         self._pde_constants,
+        #     )
 
-            return PorousMedium(
-                self.forward,
-                self.grad,
-                grid,
-                f_integrated,
-                test_func_vals,
-                d1test_func_vals,
-                d2test_func_vals,
-                d1test_func_vals_bd,
-                self._var_form,
-                self._pde_constants,
-            )
-
-        elif self._eq_type == "Weak1D":
-
-            return Weak1D(
-                self.forward,
-                grid,
-                f_integrated,
-                d1test_func_vals,
-                self._var_form,
-                weight_function,
-            )
+        # elif self._eq_type == "Weak1D":
+        #
+        #     return Weak1D(
+        #         self.forward,
+        #         grid,
+        #         f_integrated,
+        #         d1test_func_vals,
+        #         self._var_form,
+        #         weight_function,
+        #     )
 
         else:
-            raise ValueError(
-                f"Unrecognized equation type '{self._eq_type}'! "
+            raise NotImplementedError(
+                f"Equation '{self._eq_type}' not implemented! "
                 f"Choose from: {', '.join(self.EQUATION_TYPES)}"
             )
