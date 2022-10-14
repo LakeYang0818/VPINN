@@ -120,7 +120,7 @@ class NeuralNet(nn.Module):
                 f"Choose from: [1, 2, 3]"
             )
 
-        super(NeuralNet, self).__init__()
+        super().__init__()
         self.flatten = nn.Flatten()
 
         self.input_dim = input_size

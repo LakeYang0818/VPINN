@@ -55,6 +55,10 @@ def integrate_xr(
     """Integrate a function over the interior of the grid"""
 
     # TODO use weights
-    return test_function_values.attrs["grid_density"] * (test_function_values * f).isel(
+    res = test_function_values.attrs["grid_density"] * (test_function_values * f).isel(
         {val: slice(1, -1) for val in test_function_values.attrs["space_dimensions"]}
     ).sum(test_function_values.attrs["space_dimensions"])
+
+    res.attrs.update(test_function_values.attrs)
+
+    return res

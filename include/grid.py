@@ -88,7 +88,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
 
         return xarray.Dataset(
             coords=dict(idx=("idx", [0, 1]), variable=("variable", [x, "normals_x"])),
-            data_vars=dict(data=(["idx", "variable"], [[x_0, -1], [x_1, +1]])),
+            data_vars=dict(boundary_data=(["idx", "variable"], [[x_0, -1], [x_1, +1]])),
             attrs=grid.attrs,
         )
 
@@ -126,7 +126,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
                 variable=("variable", [x, y, "normals_x", "normals_y"]),
             ),
             data_vars=dict(
-                data=(
+                boundary_data=(
                     ["idx", "variable"],
                     np.stack([x_vals, y_vals, n_vals_x, n_vals_y], axis=1),
                 )
@@ -192,7 +192,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
                 variable=("variable", [x, y, z, "normals_x", "normals_y", "normals_z"]),
             ),
             data_vars=dict(
-                data=(
+                boundary_data=(
                     ["idx", "variable"],
                     np.stack(
                         [x_vals, y_vals, z_vals, n_vals_x, n_vals_y, n_vals_z], axis=1

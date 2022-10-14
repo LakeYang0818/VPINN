@@ -2,12 +2,12 @@
 paths:
   model_note: Poisson2D
 parameter_space:
-  num_epochs: 1
+  num_epochs: 5000
   VPINN:
     load_data:
 
       # Set to '~' (None) to use the settings below to generate data
-      data_dir: /Users/thomasgaskin/utopya_output/VPINN/221014-104402_Poisson2D/data/uni0
+      data_dir: ~ # /Users/thomasgaskin/utopya_output/VPINN/221014-103238_Poisson2D/data/uni0
 
       # copies to the data to the new output folder. Set to 'false' to conserve disk space.
       # This will cause any plots requiring that data to no longer function

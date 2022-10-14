@@ -265,8 +265,8 @@ can be specified under `worker_managers/num_workers` on the root-level configura
 If you thus set `num_workers` to 4 and `num_threads` to 3, you will in total be able to use 12 threads.
 
 
-## 🚧 Loading data (WIP)
-TODO
+## Loading data
+Once you have generated grid and test function data, you can reuse it to train the neural net repeatedly
 
 ## Parameter sweeps
 > **_Note_**: Take a look at the [full tutorial entry](https://docs.utopia-project.org/html/getting_started/tutorial.html#parameter-sweeps)
