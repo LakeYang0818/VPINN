@@ -266,7 +266,28 @@ If you thus set `num_workers` to 4 and `num_threads` to 3, you will in total be 
 
 
 ## Loading data
-Once you have generated grid and test function data, you can reuse it to train the neural net repeatedly
+Once you have generated grid and test function data, you can reuse it to train the neural net repeatedly. This will
+speed up computations enormously, and also allow sweep runs with different neural net configurations.
+To load a dataset, pass the path to the directory containing the `.h5` file to load to the load configuration entry of the config:
+
+```yaml
+VPINN:
+  load_data:
+    data_dir: path/to/folder
+```
+This will load all the required data and train the model on it; it will however not copy the loaded data to the
+new directory by default, in order to conserve disk space. If you want the test function and grid data stored alongside the
+neural net data (e.g. for data analysis and plotting purposes), set ``copy_data`` to true:
+
+```yaml
+VPINN:
+  load_data:
+    data_dir: path/to/folder
+    copy_data: True
+```
+
+To turn off data loading, set the ``data_dir`` entry to ``~`` (``None`` in yaml), or delete the
+``load_data`` entry entirely.
 
 ## Parameter sweeps
 > **_Note_**: Take a look at the [full tutorial entry](https://docs.utopia-project.org/html/getting_started/tutorial.html#parameter-sweeps)
