@@ -89,7 +89,7 @@ def get_data(
         training_boundary = (
             boundary
             if boundary_isel is None
-            else boundary.isel(base.get_boundary_isel(boundary_isel, grid))
+            else base.get_boundary_isel(boundary, boundary_isel, grid)
         )
         log.note("   Constructed the grid.")
 

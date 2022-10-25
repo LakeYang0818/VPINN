@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Sequence, Union
 
 import numpy as np
 import xarray
@@ -100,25 +100,41 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
 
         x_vals = y_vals = n_vals_x = n_vals_y = np.array([])
 
-        # Bottom and top boundaries
-        for i in [0, -1]:
-            x_vals = np.append(
-                x_vals,
-                grid.coords[x].data[slice(1, None) if i == 0 else slice(None, -1)],
-            )
-            y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[i], len_x - 1))
-            n_vals_x = np.append(n_vals_x, np.repeat(0, len_x - 1))
-            n_vals_y = np.append(n_vals_y, np.repeat(-1 if i == 0 else 1, len_x - 1))
+        # lower boundary
+        x_vals = np.append(
+            x_vals,
+            grid.coords[x].data[slice(None, -1)],
+        )
+        y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[0], len_x - 1))
+        n_vals_x = np.append(n_vals_x, np.repeat(0, len_x - 1))
+        n_vals_y = np.append(n_vals_y, np.repeat(-1, len_x - 1))
 
-        # Left and right boundaries
-        for i in [0, -1]:
-            y_vals = np.append(
-                y_vals,
-                grid.coords[y].data[slice(1, -1) if i == 0 else slice(None, None)],
-            )
-            x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[i], len_y - 1))
-            n_vals_x = np.append(n_vals_x, np.repeat(-1 if i == 0 else 1, len_y - 1))
-            n_vals_y = np.append(n_vals_y, np.repeat(0, len_y - 1))
+        # Right boundary
+        y_vals = np.append(
+            y_vals,
+            grid.coords[y].data[slice(None, -1)],
+        )
+        x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[-1], len_y - 1))
+        n_vals_x = np.append(n_vals_x, np.repeat(1, len_y - 1))
+        n_vals_y = np.append(n_vals_y, np.repeat(0, len_y - 1))
+
+        # upper boundary (reversed)
+        x_vals = np.append(
+            x_vals,
+            grid.coords[x].data[slice(None, 0, -1)],
+        )
+        y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[-1], len_x - 1))
+        n_vals_x = np.append(n_vals_x, np.repeat(0, len_x - 1))
+        n_vals_y = np.append(n_vals_y, np.repeat(1, len_x - 1))
+
+        # Left boundary (reversed)
+        y_vals = np.append(
+            y_vals,
+            grid.coords[y].data[slice(None, 0, -1)],
+        )
+        x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[0], len_y - 1))
+        n_vals_x = np.append(n_vals_x, np.repeat(-1, len_y - 1))
+        n_vals_y = np.append(n_vals_y, np.repeat(0, len_y - 1))
 
         return xarray.Dataset(
             coords=dict(
@@ -134,6 +150,7 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
             attrs=grid.attrs,
         )
 
+    # 3D boundary
     else:
         x, y, z = grid.attrs["space_dimensions"]
         len_x, len_y, len_z = (
@@ -144,47 +161,71 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
 
         x_vals = y_vals = z_vals = n_vals_x = n_vals_y = n_vals_z = np.array([])
 
-        # Bottom and top boundaries
-        for i in [0, -1]:
-            for j in range(len_y):
-                x_vals = np.append(x_vals, grid.coords[x].data)
-                y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[j], len_x))
-            z_vals = np.append(
-                z_vals, np.repeat(grid.coords[z].data[i], (len_x) * (len_y))
-            )
-            n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x) * (len_y)))
-            n_vals_y = np.append(n_vals_y, np.repeat(0, (len_x) * (len_y)))
-            n_vals_z = np.append(
-                n_vals_z, np.repeat(-1 if i == 0 else 1, (len_x) * (len_y))
-            )
+        # Front panel
+        for j in range(len_x - 1):
+            z_vals = np.append(z_vals, grid.coords[z].data)
+            x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[j], len_z))
+        y_vals = np.append(
+            y_vals, np.repeat(grid.coords[y].data[0], (len_x - 1) * len_z)
+        )
+        n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x - 1) * len_z))
+        n_vals_y = np.append(n_vals_y, np.repeat(-1, (len_x - 1) * len_z))
+        n_vals_z = np.append(n_vals_z, np.repeat(0, (len_x - 1) * len_z))
 
-        # Left and right boundaries
-        for i in [0, -1]:
-            for j in range(1, len_z - 1):
-                y_vals = np.append(y_vals, grid.coords[y].data)
-                z_vals = np.append(z_vals, np.repeat(grid.coords[z].data[j], len_y))
-            x_vals = np.append(
-                x_vals, np.repeat(grid.coords[x].data[i], (len_y) * (len_z - 2))
-            )
-            n_vals_x = np.append(
-                n_vals_x, np.repeat(-1 if i == 0 else 1, (len_x) * (len_y))
-            )
-            n_vals_y = np.append(n_vals_y, np.repeat(0, (len_x) * (len_y)))
-            n_vals_z = np.append(n_vals_z, np.repeat(0, (len_x) * (len_y)))
+        # Right panel
+        for j in range(len_y - 1):
+            z_vals = np.append(z_vals, grid.coords[z].data)
+            y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[j], len_z))
+        x_vals = np.append(
+            x_vals, np.repeat(grid.coords[x].data[-1], (len_y - 1) * len_z)
+        )
+        n_vals_x = np.append(n_vals_x, np.repeat(0, (len_y - 1) * len_z))
+        n_vals_y = np.append(n_vals_y, np.repeat(1, (len_y - 1) * len_z))
+        n_vals_z = np.append(n_vals_z, np.repeat(0, (len_y - 1) * len_z))
 
-        # Front and back boundaries
-        for i in [0, -1]:
-            for j in range(1, len_x - 1):
-                z_vals = np.append(z_vals, grid.coords[z].data[1:-1])
-                x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[j], len_z - 2))
-            y_vals = np.append(
-                y_vals, np.repeat(grid.coords[y].data[i], (len_x - 2) * (len_z - 2))
-            )
-            n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x) * (len_y)))
-            n_vals_y = np.append(
-                n_vals_y, np.repeat(-1 if i == 0 else 1, (len_x) * (len_y))
-            )
-            n_vals_z = np.append(n_vals_z, np.repeat(0, (len_x) * (len_y)))
+        # Back panel (reversed)
+        for j in range(len_x - 1, 0, -1):
+            z_vals = np.append(z_vals, grid.coords[z].data)
+            x_vals = np.append(x_vals, np.repeat(grid.coords[x].data[j], len_z))
+        y_vals = np.append(
+            y_vals, np.repeat(grid.coords[y].data[-1], (len_x - 1) * len_z)
+        )
+        n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x - 1) * len_z))
+        n_vals_y = np.append(n_vals_y, np.repeat(+1, (len_x - 1) * len_z))
+        n_vals_z = np.append(n_vals_z, np.repeat(0, (len_x - 1) * len_z))
+
+        # Left panel (reversed)
+        for j in range(len_y - 1, 0, -1):
+            z_vals = np.append(z_vals, grid.coords[z].data)
+            y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[j], len_z))
+        x_vals = np.append(
+            x_vals, np.repeat(grid.coords[x].data[0], (len_y - 1) * len_z)
+        )
+        n_vals_x = np.append(n_vals_x, np.repeat(0, (len_y - 1) * len_z))
+        n_vals_y = np.append(n_vals_y, np.repeat(-1, (len_y - 1) * len_z))
+        n_vals_z = np.append(n_vals_z, np.repeat(0, (len_y - 1) * len_z))
+
+        # upper panel
+        for j in range(1, len_y - 1):
+            x_vals = np.append(x_vals, grid.coords[x].data[1:-1])
+            y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[j], len_x - 2))
+        z_vals = np.append(
+            z_vals, np.repeat(grid.coords[z].data[-1], (len_x - 2) * (len_y - 2))
+        )
+        n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x - 2) * (len_y - 2)))
+        n_vals_y = np.append(n_vals_y, np.repeat(0, (len_x - 2) * (len_y - 2)))
+        n_vals_z = np.append(n_vals_z, np.repeat(1, (len_x - 2) * (len_y - 2)))
+
+        # lower panel (reversed)
+        for j in range(len_y - 2, 0, -1):
+            x_vals = np.append(x_vals, grid.coords[x].data[-2:0:-1])
+            y_vals = np.append(y_vals, np.repeat(grid.coords[y].data[j], len_x - 2))
+        z_vals = np.append(
+            z_vals, np.repeat(grid.coords[z].data[0], (len_x - 2) * (len_y - 2))
+        )
+        n_vals_x = np.append(n_vals_x, np.repeat(0, (len_x - 2) * (len_y - 2)))
+        n_vals_y = np.append(n_vals_y, np.repeat(0, (len_x - 2) * (len_y - 2)))
+        n_vals_z = np.append(n_vals_z, np.repeat(-1, (len_x - 2) * (len_y - 2)))
 
         return xarray.Dataset(
             coords=dict(
@@ -203,28 +244,36 @@ def get_boundary(grid: xarray.DataArray) -> xarray.Dataset:
         )
 
 
-def get_boundary_isel(selection: Union[str, tuple], grid: xarray.DataArray) -> dict:
-    """Returns a section of the boundary, either indexed by a range or by a keyword argument. Permissible arguments
-    are:
+def get_boundary_isel(
+    boundary: xarray.Dataset,
+    selection: Union[Sequence[Union[str, slice]], str, slice],
+    grid: xarray.DataArray,
+) -> xarray.Dataset:
+    """Returns a section of the boundary, either indexed by a slice range or by a keyword argument, or by combinations
+     thereof. Permissible keyword arguments are:
          - 1-dimensional grid: 'left', 'right'
-         - 2-dimensional grid: 'left', 'right', 'lower', 'upper'
+         - 2-dimensional grid: 'left', 'right', 'lower', 'upper', or combinations
          - 3-dimensional grid: 'left', 'right', 'lower', 'upper', 'front', 'back'
-    If a tuple of the kind (start, stop) is passed, this selection is made on the 'idx' argument of the grid boundary.
+    If a slice of the kind (start, stop, step) is passed, this selection is made on the 'idx' argument of the grid boundary.
+    The arguments can also be mixed in a Sequence, e.g.
+        - ['left', 'right']
+        - [!slice [0, 15], 'upper', 'left'], etc.
 
-    :param selection: (str or tuple) the boundary selection argument
+    :param boundary: the boundary to slice
+    :param selection: (Sequence str or slice) the boundary selection argument
     :param grid: the underlying grid.
     :return: a dictionary containing the selection, passed on to xr.DataArray.isel()
     """
-    if isinstance(selection, tuple):
-        return dict(idx=slice(selection[0], selection[1]))
+    if isinstance(selection, slice):
+        return boundary.isel(dict(idx=selection))
 
     elif isinstance(selection, str):
         # One-dimensional grid
         if grid.attrs["grid_dimension"] == 1:
             if selection == "left":
-                return dict(idx=0)
+                return boundary.isel(dict(idx=0))
             elif selection == "right":
-                return dict(idx=-1)
+                return boundary.isel(dict(idx=-1))
             else:
                 raise ValueError(
                     f"1-dimensional grid has no {selection} boundary! Pass an index range "
@@ -235,21 +284,21 @@ def get_boundary_isel(selection: Union[str, tuple], grid: xarray.DataArray) -> d
                 grid.coords[grid.attrs["space_dimensions"][1]]
             )
             l0, l1 = 0, len_x - 1
-            u0, u1 = l1, l1 + len_x - 1
-            le0, le1 = u1, u1 + len_y - 1
-            r0, r1 = le1, None
+            r0, r1 = l1, l1 + len_y - 1
+            u0, u1 = r1, r1 + len_x - 1
+            le0, le1 = u1, None
             if selection == "lower":
-                return dict(idx=slice(l0, l1))
+                return boundary.isel(dict(idx=slice(l0, l1)))
             elif selection == "upper":
-                return dict(idx=slice(u0, u1))
+                return boundary.isel(dict(idx=slice(u0, u1)))
             elif selection == "left":
-                return dict(idx=slice(le0, le1))
+                return boundary.isel(dict(idx=slice(le0, le1)))
             elif selection == "right":
-                return dict(idx=slice(r0, r1))
+                return boundary.isel(dict(idx=slice(r0, r1)))
             else:
                 raise ValueError(
                     f"2-dimensional grid has no {selection} boundary! Pass an index range "
-                    f"or one of 'left', 'right', 'top', 'bottom'."
+                    f"or one of 'left', 'right', 'upper', 'lower'."
                 )
         elif grid.attrs["grid_dimension"] == 3:
             len_x, len_y, len_z = (
@@ -257,28 +306,35 @@ def get_boundary_isel(selection: Union[str, tuple], grid: xarray.DataArray) -> d
                 len(grid.coords[grid.attrs["space_dimensions"][1]]),
                 len(grid.coords[grid.attrs["space_dimensions"][2]]),
             )
-            l0, l1 = 0, len_x * len_y
-            u0, u1 = l1, 2 * l1
-            le0, le1 = u1, u1 + len_y * (len_z - 2)
-            r0, r1 = le1, le1 + len_y * (len_z - 2)
-            f0, f1 = r1, r1 + (len_x - 2) * (len_z - 2)
-            b0, b1 = f1, None
+            front_0, front_1 = None, (len_x - 1) * len_z
+            right_0, right_1 = front_1, front_1 + (len_y - 1) * len_z
+            back_0, back_1 = right_1, right_1 + (len_x - 1) * len_z
+            left_0, left_1 = back_1, back_1 + (len_y - 1) * len_z
+            upper_0, upper_1 = left_1, left_1 + (len_x - 2) * (len_y - 2)
+            lower_0, lower_1 = upper_1, None
+
+            if selection == "front":
+                return boundary.isel(dict(idx=slice(front_0, front_1)))
+            if selection == "right":
+                return boundary.isel(dict(idx=slice(right_0, right_1)))
+            if selection == "back":
+                return boundary.isel(dict(idx=slice(back_0, back_1)))
+            if selection == "left":
+                return boundary.isel(dict(idx=slice(left_0, left_1)))
+            if selection == "upper":
+                return boundary.isel(dict(idx=slice(upper_0, upper_1)))
             if selection == "lower":
-                return dict(idx=slice(l0, l1))
-            elif selection == "upper":
-                return dict(idx=slice(u0, u1))
-            elif selection == "left":
-                return dict(idx=slice(le0, le1))
-            elif selection == "right":
-                return dict(idx=slice(r0, r1))
-            elif selection == "front":
-                return dict(idx=slice(f0, f1))
-            elif selection == "back":
-                return dict(idx=slice(b0, b1))
+                return boundary.isel(dict(idx=slice(lower_0, lower_1)))
             else:
                 raise ValueError(
-                    f"2-dimensional grid has no {selection} boundary! Pass an index range "
-                    f"or one of 'left', 'right', 'top', 'bottom'."
+                    f"3-dimensional grid has no {selection} boundary! Pass an index range "
+                    f"or one of 'front', 'right', 'back', 'left', 'upper', 'lower'."
                 )
+    # Combine individual sections of the boundary into one
+    elif isinstance(selection, Sequence):
+        res = []
+        for sel in selection:
+            res.append(get_boundary_isel(boundary, sel, grid))
+        return xarray.concat(res, dim="idx")
     else:
         raise ValueError(f"Unrecognised boundary selection criterion {selection}!")

@@ -243,9 +243,6 @@ Training:
   device: cpu
   num_threads: ~
 ```
-The `boundary` entry sets the range of the `boundary` to use for training. It can be a keyword (`lower`, `upper`, `left`,
-`right`, `front`, `back`) or an index range to select a specific section of the boundary.
-
 The `device` entry sets the training device. The default here is the `cpu`; you can set it to any
 supported pytorch training device (e.g. `cuda` for most GPUs). Make sure your platform is configured to support the selected device.
 
@@ -264,6 +261,21 @@ can be specified under `worker_managers/num_workers` on the root-level configura
 `parameter_space`). The `Training/num_threads` entry controls the number of threads *per model run* to be used during training.
 If you thus set `num_workers` to 4 and `num_threads` to 3, you will in total be able to use 12 threads.
 
+#### Selecting the training boundary
+The `boundary` entry sets the section of the `boundary` to use for training. It can be a keyword (`lower`, `upper`, `left`,
+`right`, `front`, `back`), an index range to select a specific section of the boundary, or a combination
+of both. For instance, on a two-dimensional grid, you can do
+```yaml
+boundary:
+  - left
+  - lower
+  - !slice [10, 15]
+```
+to select the and left and lower boundary, as well as a section of the right boundary. The ``!slice`` argument takes
+arguments of the kind ``(start, stop, step)``, as is common in Python. You can combine these arguments at will.
+Note that the indexing range of the boundary begins (for two-dimensional grids) in the lower left corner and traverses the
+grid boundary anti-clockwise. For three dimensional grids, the index begins on the lower left corner of the
+front panel, wraps anti-clockwise around the sides, then selects the upper, and finally the lower panel.
 
 ## 🚧 Loading data (WIP)
 TODO
