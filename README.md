@@ -90,7 +90,7 @@ calling
 ```console
 utopya run VPINN path/to/run_cfg.yml
 ```
-In this file, you only need to specify those entries from the `<modelname>_cfg.yml` file you wish to change,
+In this file, you only need to specify those entries from the `VPINN_cfg.yml` file you wish to change,
 and not reproduce the entire configuration set. The advantage of this approach is that you can
 create multiple configs for different scenarios, and leave the working base configuration untouched.
 An example could look like this:
@@ -136,7 +136,7 @@ utopya eval VPINN --eval-cfg path/to/eval/cfg
 Even more convenient are so-called *configuration* sets:
 
 ## Configuration sets
-Configuration sets are bundled run and evaluation configuration sets. Take a look at the `models/cfgs` folder:
+Configuration sets are bundled run and evaluation configuration configurations. Take a look at the `models/cfgs` folder:
 it contains a number of examples. To run and evaluate the model from one of these configuration sets, just call
 ```console
 utopya run VPINN --cfg-set cfg_set_name
@@ -147,14 +147,14 @@ rather than just a name). Running the configuration set will produce plots. If y
 you do not need to re-run the model, since the data has already been generated. Simply call
 
 ```console
-utopya eval HarrisWilson --cfg-set <name_of_cfg_set>
+utopya eval VPINN --cfg-set <name_of_cfg_set>
 ```
 
 This will re-evaluate the *last model you ran*. You can re-evaluate any dataset, of course, by
 providing the path to that dataset, as before:
 
 ```console
-utopya eval HarrisWilson path/to/output/folder --cfg-set <name_of_cfg_set>
+utopya eval VPINN path/to/output/folder --cfg-set <name_of_cfg_set>
 ```
 ## Modifying the configuration
 To control the simulation, modify the entries in your run configuration. There are
@@ -212,8 +212,7 @@ The test function weighting is controlled from `test_functions/weight_function` 
 weighting can be either `uniform` (all test functions have weight 1), or `exponential`, meaning
 the `kl`-th function has weight `2**{-(k+l)}`.
 
-### Neural Net configuration
-
+## How to adjust the neural net configurations
 You can vary the size of the neural net and the activation functions
 right from the config. The size of the input layer is inferred from
 the data passed to it, and the size of the output layer is
@@ -226,20 +225,42 @@ NeuralNet:
   num_layers: 6
   nodes_per_layer: 20
   activation_funcs:
-    first: sine
-    2: cosine
-    3: tanh
-    last: abs
+    0: sine
+    1: cosine
+    2: tanh
+    -1: abs
   bias: True
   init_bias: [0, 4]
   learning_rate: 0.002
 ```
 ``num_layers`` and ``nodes_per_layer`` give the structure of the hidden layers (hidden layers
-with different numbers of nodes is not yet supported). The ``activation_funcs`` dictionary
-allows specifying the activation function on each layer: just add the number of the layer together
-with the name of a common function, such as ``relu``, ``linear``, ``tanh``, ``sigmoid``, etc.
+with different numbers of nodes is not yet supported).
 ``bias`` controls use of the bias, and the ``init_bias`` sets the initialisation interval for the
-bias.
+bias. The ``activation_funcs`` dictionary
+allows specifying the activation function on each layer: just add the number of the layer together
+with the name of a
+[pytorch activation function](https://pytorch.org/docs/stable/nn.html#non-linear-activations-weighted-sum-nonlinearity),
+such as ``relu``, ``linear``, ``tanh``, ``sigmoid``, etc. You can also provide a single activation function
+for all layers:
+```yaml
+NeuralNet:
+  activation_funcs: sigmoid
+```
+Some activation functions take arguments and keyword arguments; these can be provided like this:
+
+```yaml
+NeuralNet:
+  num_layers: 6
+  nodes_per_layer: 20
+  activation_funcs:
+    name: Hardtanh
+    args:
+      - -2 #min_value
+      - +2 #max_value
+    kwargs:
+      # kwargs here ...
+```
+
 
 ### Training settings
 You can modify the training settings, such as the batch size or the training device, from the
@@ -327,10 +348,10 @@ parameter_space:
     default: 0
     range: [10]
 ```
-Then call your model via
+Then call the model via
 
 ```console
-utopya run <model_name> --run-mode sweep
+utopya run VPINN --run-mode sweep
 ```
 The model will then run ten times, each time using a different seed value. You can also add the following entry to
 the configuration file at the root-level:
