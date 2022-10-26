@@ -1,0 +1,22 @@
+---
+dirty: true
+git_diff: /Users/thomasgaskin/utopya_output/VPINN/221014-103319_Poisson2D/config/git_diff_project.patch
+git_status:
+- [M, include/grid.py]
+- ['', M include/integration.py]
+- ['', M include/neural_net.py]
+- ['', M model/DataGeneration.py]
+- ['', M model/VPINN_cfg.yml]
+- ['', M model/cfgs/Poisson1D/run.yml]
+- ['', M model/cfgs/Poisson2D/eval.yml]
+- ['', M model/cfgs/Poisson2D/run.yml]
+- ['', M model/run.py]
+- [??, data/]
+have_git_repo: true
+latest_commit: {author: Thomas Gaskin <tgaskin@live.co.uk>, author_date: '2022-10-12
+    13:11:34', commit: d1769ab524d9f4dfb552652f7fe4885f038229f2, gitdir: /Users/thomasgaskin/VPINNs/.git,
+  message: "Merge pull request #5 from ThGaskin/enable_gpu_training\nEnable GPU training",
+  parent: dfe54a9a5c7d176339d67037bd2f2411aa51d6f4, refs: enable_loading_from_file,
+  tree: 6669fb012951a183d08809bafa9d9b48b8500ecf}
+project_base_dir: /Users/thomasgaskin/VPINNs
+project_name: VPINNS

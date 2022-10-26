@@ -4,6 +4,8 @@ paths:
 parameter_space:
   num_epochs: 5000
   VPINN:
+    load_data:
+      data_dir: ~
     space:
       x:
         extent: [-1, 1 ]
@@ -28,7 +30,7 @@ parameter_space:
         3: tanh
         4: linear
     Training:
-      device: mps
+      device: cpu
       learning_rate: 0.001
       variational_loss_weight: 20
     predictions_grid:

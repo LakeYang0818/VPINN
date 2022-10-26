@@ -9,6 +9,8 @@ import paramspace
 import xarray as xr
 from dantro._import_tools import import_module_from_path
 
+import utopya.eval.datamanager
+
 log = logging.getLogger(__name__)
 
 sys.path.append(up(up(__file__)))
@@ -22,13 +24,12 @@ base = import_module_from_path(mod_path=up(up(__file__)), mod_str="include")
 
 
 def get_data(
-    load_from_file: str,
+    load_cfg: dict,
     space_dict: dict,
     test_func_dict: dict,
     *,
     solution: callable,
     forcing: callable,
-    var_form: int,
     boundary_isel: Union[str, tuple] = None,
     h5file: h5.File,
 ) -> dict:
@@ -36,7 +37,10 @@ def get_data(
     """Returns the grid and test function data, either by loading it from a file or generating it.
     If generated, data is to written to the output folder
 
-    :param load_from_file: the path to the data file. If none, data is automatically generated
+    :param load_cfg: load configuration, containing the path to the data file. If the path is None, data is
+         automatically generated. If the ``copy_data`` entry is true, data will be copied and written to the
+         output directory; however, this is false by default to save disk space.
+         The configuration also contains further kwargs, passed to the loader.
     :param space_dict: the dictionary containing the space configuration
     :param test_func_dict: the dictionary containing the test function configuration
     :param solution: the explicit solution (to be evaluated on the grid boundary)
@@ -44,35 +48,98 @@ def get_data(
     :param var_form: the variational form to use
     :param boundary_isel: (optional) section of the boundary to use for training. Can either be a string ('lower',
         'upper', 'left', 'right') or a range.
-    :param h5file: the h5file to write data to
+    :param h5file: the h5file to write data to. A new group is added to this file.
+
     :return: data: a dictionary containing the grid and test function data
     """
 
+    # TODO: allow selection of which data to load
+    # TODO: allow passing Sequences of boundary sections, e.g. ['lower', 'upper']
+    # TODO: Do not generate separate h5Group?
+    # TODO: re-writing loaded data not possible
+
+    # Collect datasets in a dictionary, passed to the model
     data = {}
 
-    if load_from_file is not None:
+    # The directory from which to load data
+    data_dir = load_cfg.pop("data_dir", None)
+
+    if data_dir is not None:
+
+        # --------------------------------------------------------------------------------------------------------------
+        # --- Load data ------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
 
         log.info("   Loading data ...")
-        data = {}
 
-        with h5.File(load_from_file, "r") as f:
-            data["grid"] = f["grid"]
-            data["test_func_values"] = f["test_function_values"]
+        # If data is loaded, determine whether to copy that data to the new output directory.
+        # This is false by default to save disk storage
+        copy_data = load_cfg.pop("copy_data", False)
 
-            if var_form >= 1:
-                data["d1test_func_values"] = f["d1_test_function_values"]
+        dm = utopya.eval.datamanager.DataManager(data_dir=data_dir, out_dir=False)
 
-            if var_form >= 2:
-                data["d2test_func_values"] = f["d2_test_function_values"]
-                data["d1test_func_values_bd"] = f["d1_test_function_values_boundary"]
+        dm.load(
+            "VPINN_data",
+            loader=load_cfg.pop("loader", "hdf5"),
+            glob_str=load_cfg.pop("glob_str", "*.h5"),
+            print_tree=load_cfg.pop("print_tree", False),
+            **load_cfg,
+        )
+
+        for key in list(dm["VPINN_data"]["data"]["data"].keys()):
+
+            # Get the dataset and convert to xr.DataArray
+            ds = dm["VPINN_data"]["data"]["data"][key]
+            data[key] = ds.data
+
+            # These entries should be xr.Datasets
+            if key in [
+                "training_data",
+                "grid_boundary",
+                "d1_test_function_values_boundary",
+            ]:
+                data[key] = ds.data.to_dataset()
+
+            # Manually copy attributes
+            for attr in [
+                ("grid_density", lambda x: float(x)),
+                ("grid_dimension", lambda x: int(x)),
+                ("space_dimensions", lambda x: [str(_) for _ in x]),
+                ("test_function_dims", lambda x: [str(_) for _ in x]),
+            ]:
+                if attr[0] in ds.attrs.keys():
+
+                    data[key].attrs[attr[0]] = attr[1](ds.attrs[attr[0]])
+
+        # Rename data
+        data["training_data"] = data["training_data"].rename(
+            {"training_data": "boundary_data"}
+        )
+
+        # Stack the test function indices into a single multi-index
+        for key in [
+            "test_function_values",
+            "d1_test_function_values",
+            "d2_test_function_values",
+            "d1_test_function_values_boundary",
+            "f_integrated",
+        ]:
+            data[key] = (
+                data[key]
+                .stack(tf_idx=data[key].attrs["test_function_dims"])
+                .transpose("tf_idx", ...)
+            )
 
         log.info("   All data loaded")
 
+        if not copy_data:
+            return data
     else:
 
         # --------------------------------------------------------------------------------------------------------------
         # --- Generate data --------------------------------------------------------------------------------------------
         # --------------------------------------------------------------------------------------------------------------
+
         if len(space_dict) != len(test_func_dict["num_functions"]):
             raise ValueError(
                 f"Space and test function dimensions do not match! "
@@ -85,7 +152,7 @@ def get_data(
         grid: xr.DataArray = base.construct_grid(space_dict)
         boundary: xr.Dataset = base.get_boundary(grid)
         data["grid"] = grid
-        data["boundary"] = boundary
+        data["grid_boundary"] = boundary
         training_boundary = (
             boundary
             if boundary_isel is None
@@ -93,8 +160,8 @@ def get_data(
         )
         log.note("   Constructed the grid.")
 
-        # The test functions are only defined on [-1, 1]
-        # TODO Generating two grids can be expensive!
+        # The test functions are only defined on [-1, 1], so a separate grid is used to generate
+        # test function values
         tf_space_dict = paramspace.tools.recursive_replace(
             copy.deepcopy(space_dict),
             select_func=lambda d: "extent" in d,
@@ -105,8 +172,6 @@ def get_data(
         tf_boundary: xr.Dataset = base.get_boundary(tf_grid)
 
         log.debug("   Evaluating test functions on grid ...")
-        # The test functions are defined on
-        # TODO the test functions only need to be caluclated on the coordinates
         test_function_indices = base.construct_grid(
             test_func_dict["num_functions"], lower=1, dtype=int
         )
@@ -115,37 +180,41 @@ def get_data(
         )
 
         log.note("   Evaluated the test functions.")
-        data["test_func_values"] = test_function_values.stack(
+        data["test_function_values"] = test_function_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
-        )
+        ).transpose("tf_idx", ...)
 
         log.debug("   Evaluating test function derivatives on grid ... ")
-        d1test_func_values = base.tf_grid_evaluation(
+        d1_test_function_values = base.tf_grid_evaluation(
             tf_grid, test_function_indices, type=test_func_dict["type"], d=1
         )
 
-        data["d1test_func_values"] = d1test_func_values.stack(
+        data["d1_test_function_values"] = d1_test_function_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
-        )
+        ).transpose("tf_idx", ...)
 
-        d1test_func_values_boundary = base.tf_simple_evaluation(
+        d1_test_function_values_boundary = base.tf_simple_evaluation(
             tf_boundary.sel(variable=tf_grid.attrs["space_dimensions"]),
             test_function_indices,
             type=test_func_dict["type"],
             d=1,
             core_dim="variable",
         )
-        data["d1test_func_values_boundary"] = d1test_func_values_boundary.stack(
+        data[
+            "d1_test_function_values_boundary"
+        ] = d1_test_function_values_boundary.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
-        ).transpose("tf_idx", ...)
+        ).transpose(
+            "tf_idx", ...
+        )
 
         log.debug("   Evaluating test function second derivatives on grid ... ")
-        d2test_func_values = base.tf_grid_evaluation(
+        d2_test_function_values = base.tf_grid_evaluation(
             tf_grid, test_function_indices, type=test_func_dict["type"], d=2
         )
-        data["d2test_func_values"] = d2test_func_values.stack(
+        data["d2_test_function_values"] = d2_test_function_values.stack(
             tf_idx=test_function_values.attrs["test_function_dims"]
-        )
+        ).transpose("tf_idx", ...)
 
         log.debug("   Evaluating the external function on the grid ...")
         f_evaluated: xr.DataArray = xr.apply_ufunc(
@@ -156,11 +225,11 @@ def get_data(
         log.debug("   Integrating the function over the grid ...")
         f_integrated = base.integrate_xr(f_evaluated, test_function_values)
         data["f_integrated"] = f_integrated.stack(
-            tf_idx=test_function_values.attrs["test_function_dims"]
-        )
+            tf_idx=f_integrated.attrs["test_function_dims"]
+        ).transpose("tf_idx", ...)
 
         log.debug("   Evaluating the solution on the boundary ...")
-        u_boundary: xr.Dataset = xr.concat(
+        training_data: xr.Dataset = xr.concat(
             [
                 training_boundary,
                 xr.apply_ufunc(
@@ -172,205 +241,250 @@ def get_data(
             ],
             dim="variable",
         )
-        data["training_data"] = u_boundary
+        data["training_data"] = training_data
 
-        # --------------------------------------------------------------------------------------------------------------
-        # --- Set up chunked dataset to store the state data in --------------------------------------------------------
-        # --------------------------------------------------------------------------------------------------------------
+        log.info("   Generated data.")
+    # ------------------------------------------------------------------------------------------------------------------
+    # --- Set up chunked dataset to store the state data in ------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
-        data_group = h5file.create_group("data")
+    log.info("   Saving data ... ")
+    data_group = h5file.create_group("data")
 
-        # --------------------------------------------------------------------------------------------------------------
-        # --- Grid -----------------------------------------------------------------------------------------------------
-        # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    # --- Grid and grid boundary ---------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
-        dset_grid = data_group.create_dataset(
-            "grid",
-            list(grid.sizes.values()),
-            maxshape=list(grid.sizes.values()),
-            chunks=True,
-            compression=3,
-        )
-        dset_grid.attrs["dim_names"] = list(grid.sizes)
+    # Grid
+    grid = data["grid"]
+    dset_grid = data_group.create_dataset(
+        "grid",
+        list(grid.sizes.values()),
+        maxshape=list(grid.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_grid.attrs["dim_names"] = [str(_) for _ in list(grid.sizes)]
 
-        # Set attributes
-        for idx in list(grid.sizes):
-            dset_grid.attrs["coords_mode__" + str(idx)] = "values"
-            dset_grid.attrs["coords__" + str(idx)] = grid.coords[idx].data
+    # Set attributes
+    for idx in list(grid.sizes):
+        dset_grid.attrs["coords_mode__" + str(idx)] = "values"
+        dset_grid.attrs["coords__" + str(idx)] = grid.coords[idx].data
+    dset_grid.attrs.update(grid.attrs)
 
-        dset_grid[
-            :,
-        ] = grid
+    # Write data
+    dset_grid[
+        :,
+    ] = grid
 
-        # Training data: values of the test function on the boundary
-        dset_boundary = data_group.create_dataset(
-            "grid_boundary",
-            [
-                len(boundary),
-                list(boundary.sizes.values())[0],
-                list(boundary.sizes.values())[1],
-            ],
-            maxshape=[
-                len(boundary),
-                list(boundary.sizes.values())[0],
-                list(boundary.sizes.values())[1],
-            ],
-            chunks=True,
-            compression=3,
-        )
-        dset_boundary.attrs["dim_names"] = ["dim_name__0", "idx", "variable"]
+    # Grid boundary
+    dset_boundary = data_group.create_dataset(
+        "grid_boundary",
+        list(data["grid_boundary"].sizes.values()),
+        maxshape=list(data["grid_boundary"].sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_boundary.attrs["dim_names"] = ["idx", "variable"]
 
-        # Set attributes
-        dset_boundary.attrs["coords_mode__idx"] = "trivial"
-        dset_boundary.attrs["coords_mode__variable"] = "values"
-        dset_boundary.attrs["coords__variable"] = [
-            str(_) for _ in boundary.coords["variable"].data
-        ]
+    # Set attributes
+    dset_boundary.attrs["coords_mode__idx"] = "trivial"
+    dset_boundary.attrs["coords_mode__variable"] = "values"
+    dset_boundary.attrs["coords__variable"] = [
+        str(_) for _ in data["grid_boundary"].coords["variable"].data
+    ]
+    dset_boundary.attrs.update(data["grid_boundary"].attrs)
 
-        # Write data
-        dset_boundary[
-            :,
-        ] = boundary.to_array()
+    # Write data
+    dset_boundary[
+        :,
+    ] = data["grid_boundary"].to_array()
 
-        # --------------------------------------------------------------------------------------------------------------
-        # --- Test function values -------------------------------------------------------------------------------------
-        # --------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+    # --- Test function values -----------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
-        # Store the test function values
-        dset_test_func_vals = data_group.create_dataset(
-            "test_function_values",
-            test_function_values.shape,
-            maxshape=test_function_values.shape,
-            chunks=True,
-            compression=3,
-        )
-        dset_test_func_vals.attrs["dim_names"] = list(test_function_values.sizes)
+    # Test function values
+    test_function_values = data["test_function_values"].unstack()
+    dset_test_function_values = data_group.create_dataset(
+        "test_function_values",
+        test_function_values.shape,
+        maxshape=test_function_values.shape,
+        chunks=True,
+        compression=3,
+    )
+    dset_test_function_values.attrs["dim_names"] = [
+        str(_) for _ in list(test_function_values.sizes)
+    ]
 
-        # Store the first derivatives of the test function values
-        dset_d1_test_func_vals = data_group.create_dataset(
-            "d1_test_function_values",
-            d1test_func_values.shape,
-            maxshape=d1test_func_values.shape,
-            chunks=True,
-            compression=3,
-        )
-        dset_d1_test_func_vals.attrs["dim_names"] = list(d1test_func_values.sizes)
+    # First derivatives of the test function values
+    d1_test_function_values = data["d1_test_function_values"].unstack()
+    dset_d1_test_function_values = data_group.create_dataset(
+        "d1_test_function_values",
+        d1_test_function_values.shape,
+        maxshape=d1_test_function_values.shape,
+        chunks=True,
+        compression=3,
+    )
+    dset_d1_test_function_values.attrs["dim_names"] = [
+        str(_) for _ in list(d1_test_function_values.sizes)
+    ]
 
-        # Store the second derivatives of the test function values
-        dset_d2_test_func_vals = data_group.create_dataset(
-            "d2_test_function_values",
-            d2test_func_values.shape,
-            maxshape=d2test_func_values.shape,
-            chunks=True,
-            compression=3,
-        )
-        dset_d2_test_func_vals.attrs["dim_names"] = list(d2test_func_values.sizes)
+    # Second derivatives of the test function values
+    d2_test_function_values = data["d2_test_function_values"].unstack()
+    dset_d2_test_function_values = data_group.create_dataset(
+        "d2_test_function_values",
+        d2_test_function_values.shape,
+        maxshape=d2_test_function_values.shape,
+        chunks=True,
+        compression=3,
+    )
+    dset_d2_test_function_values.attrs["dim_names"] = [
+        str(_) for _ in list(d2_test_function_values.sizes)
+    ]
 
-        # Set attributes
-        for idx in list(test_function_values.sizes):
-            dset_test_func_vals.attrs["coords_mode__" + str(idx)] = "values"
-            dset_test_func_vals.attrs[
-                "coords__" + str(idx)
-            ] = test_function_values.coords[idx].data
+    # Set attributes
+    for idx in list(test_function_values.sizes):
+        dset_test_function_values.attrs["coords_mode__" + str(idx)] = "values"
+        dset_test_function_values.attrs[
+            "coords__" + str(idx)
+        ] = test_function_values.coords[idx].data
 
-            dset_d1_test_func_vals.attrs["coords_mode__" + str(idx)] = "values"
-            dset_d1_test_func_vals.attrs[
-                "coords__" + str(idx)
-            ] = d1test_func_values.coords[idx].data
+        dset_d1_test_function_values.attrs["coords_mode__" + str(idx)] = "values"
+        dset_d1_test_function_values.attrs[
+            "coords__" + str(idx)
+        ] = d1_test_function_values.coords[idx].data
 
-            dset_d2_test_func_vals.attrs["coords_mode__" + str(idx)] = "values"
-            dset_d2_test_func_vals.attrs[
-                "coords__" + str(idx)
-            ] = d2test_func_values.coords[idx].data
+        dset_d2_test_function_values.attrs["coords_mode__" + str(idx)] = "values"
+        dset_d2_test_function_values.attrs[
+            "coords__" + str(idx)
+        ] = d2_test_function_values.coords[idx].data
+    dset_test_function_values.attrs.update(test_function_values.attrs)
+    dset_d1_test_function_values.attrs.update(d1_test_function_values.attrs)
+    dset_d2_test_function_values.attrs.update(d2_test_function_values.attrs)
 
-        # Write the data
-        dset_test_func_vals[
-            :,
-        ] = test_function_values
-        dset_d1_test_func_vals[
-            :,
-        ] = d1test_func_values
-        dset_d2_test_func_vals[
-            :,
-        ] = d2test_func_values
+    # Write the data
+    dset_test_function_values[
+        :,
+    ] = test_function_values
+    dset_d1_test_function_values[
+        :,
+    ] = d1_test_function_values
+    dset_d2_test_function_values[
+        :,
+    ] = d2_test_function_values
 
-        # --------------------------------------------------------------------------------------------------------------
-        # --- External forcing -----------------------------------------------------------------------------------------
-        # --------------------------------------------------------------------------------------------------------------
+    # First derivatives of the test function values on the boundary
+    d1_test_function_values_boundary = (
+        data["d1_test_function_values_boundary"].unstack().to_array()
+    )
 
-        # Store the forcing evaluated on the grid
-        dset_f_evaluated = data_group.create_dataset(
-            "f_evaluated",
-            list(f_evaluated.sizes.values()),
-            maxshape=list(f_evaluated.sizes.values()),
-            chunks=True,
-            compression=3,
-        )
-        dset_f_evaluated.attrs["dim_names"] = list(f_evaluated.sizes)
+    dset_d1_test_function_values_boundary = data_group.create_dataset(
+        "d1_test_function_values_boundary",
+        list(d1_test_function_values_boundary.sizes.values()),
+        maxshape=list(d1_test_function_values_boundary.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_d1_test_function_values_boundary.attrs["dim_names"] = [
+        str(_) for _ in list(d1_test_function_values_boundary.sizes)
+    ]
 
-        # Set the attributes
-        for idx in list(f_evaluated.sizes):
-            dset_f_evaluated.attrs["coords_mode__" + str(idx)] = "values"
-            dset_f_evaluated.attrs["coords__" + str(idx)] = grid.coords[idx].data
+    # Set attributes
+    for idx in list(d1_test_function_values_boundary.sizes):
+        dset_d1_test_function_values_boundary.attrs[
+            "coords_mode__" + str(idx)
+        ] = "values"
+        dset_d1_test_function_values_boundary.attrs[
+            "coords__" + str(idx)
+        ] = d1_test_function_values_boundary.coords[idx].data
 
-        dset_f_evaluated[
-            :,
-        ] = f_evaluated
+    dset_d1_test_function_values_boundary.attrs.update(
+        d1_test_function_values_boundary.attrs
+    )
 
-        # Store the integral of the forcing against the test functions. This dataset is indexed by the
-        # test function indices
-        dset_f_integrated = data_group.create_dataset(
-            "f_integrated",
-            list(f_integrated.sizes.values()),
-            maxshape=list(f_integrated.sizes.values()),
-            chunks=True,
-            compression=3,
-        )
-        dset_f_integrated.attrs["dim_names"] = list(f_integrated.sizes)
+    # Write the data
+    dset_d1_test_function_values_boundary[
+        :,
+    ] = d1_test_function_values_boundary
 
-        for idx in list(f_integrated.sizes):
-            dset_f_integrated.attrs["coords_mode__" + str(idx)] = "values"
-            dset_f_integrated.attrs["coords__" + str(idx)] = f_integrated.coords[
-                idx
-            ].data
-        dset_f_integrated[
-            :,
-        ] = f_integrated
+    # ------------------------------------------------------------------------------------------------------------------
+    # --- External forcing ---------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
-        # --------------------------------------------------------------------------------------------------------------
-        # --- Exact solution -------------------------------------------------------------------------------------------
-        # --------------------------------------------------------------------------------------------------------------
+    # External function evaluated on the grid
+    f_evaluated = data["f_evaluated"]
+    dset_f_evaluated = data_group.create_dataset(
+        "f_evaluated",
+        list(f_evaluated.sizes.values()),
+        maxshape=list(f_evaluated.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_f_evaluated.attrs["dim_names"] = [str(_) for _ in list(f_evaluated.sizes)]
 
-        # Training data: values of the test function on the boundary
-        dset_u_exact_bd = data_group.create_dataset(
-            "u_exact_boundary",
-            [
-                len(u_boundary),
-                list(u_boundary.sizes.values())[0],
-                list(u_boundary.sizes.values())[1],
-            ],
-            maxshape=[
-                len(u_boundary),
-                list(u_boundary.sizes.values())[0],
-                list(u_boundary.sizes.values())[1],
-            ],
-            chunks=True,
-            compression=3,
-        )
-        dset_u_exact_bd.attrs["dim_names"] = ["dim_name__0", "idx", "variable"]
+    # Set the attributes
+    for idx in list(f_evaluated.sizes):
+        dset_f_evaluated.attrs["coords_mode__" + str(idx)] = "values"
+        dset_f_evaluated.attrs["coords__" + str(idx)] = grid.coords[idx].data
+    dset_f_evaluated.attrs.update(f_evaluated.attrs)
 
-        # Set attributes
-        dset_u_exact_bd.attrs["coords_mode__idx"] = "trivial"
-        dset_u_exact_bd.attrs["coords_mode__variable"] = "values"
-        dset_u_exact_bd.attrs["coords__variable"] = [
-            str(_) for _ in u_boundary.coords["variable"].data
-        ]
+    # Write the data
+    dset_f_evaluated[
+        :,
+    ] = f_evaluated
 
-        # Write data
-        dset_u_exact_bd[
-            :,
-        ] = u_boundary.to_array()
+    # Integral of the forcing against the test functions.
+    # This dataset is indexed by the test function indices
+    f_integrated = data["f_integrated"].unstack()
+    dset_f_integrated = data_group.create_dataset(
+        "f_integrated",
+        list(f_integrated.sizes.values()),
+        maxshape=list(f_integrated.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_f_integrated.attrs["dim_names"] = [str(_) for _ in list(f_integrated.sizes)]
 
-        log.info("   All data generated and saved.")
+    # Set attributes
+    for idx in list(f_integrated.sizes):
+        dset_f_integrated.attrs["coords_mode__" + str(idx)] = "values"
+        dset_f_integrated.attrs["coords__" + str(idx)] = f_integrated.coords[idx].data
+    dset_f_integrated.attrs.update(f_integrated.attrs)
+
+    # Write data
+    dset_f_integrated[
+        :,
+    ] = f_integrated
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # --- Boundary training data ---------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+
+    # Training data: values of the test function on the boundary
+    training_data = data["training_data"]
+    dset_training_data = data_group.create_dataset(
+        "training_data",
+        list(training_data.sizes.values()),
+        maxshape=list(training_data.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_training_data.attrs["dim_names"] = [str(_) for _ in list(training_data.sizes)]
+    dset_training_data.attrs.update(training_data.attrs)
+
+    # Set attributes
+    dset_training_data.attrs["coords_mode__idx"] = "trivial"
+    dset_training_data.attrs["coords_mode__variable"] = "values"
+    dset_training_data.attrs["coords__variable"] = [
+        str(_) for _ in training_data.coords["variable"].data
+    ]
+
+    # Write data
+    dset_training_data[
+        :,
+    ] = training_data.to_array()
+
+    log.info("   All data saved.")
 
     return data
