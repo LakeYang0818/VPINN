@@ -2,13 +2,8 @@
 paths:
   model_note: Burger1+1D
 parameter_space:
-  num_epochs: 7000
+  num_epochs: 1
   VPINN:
-    load_data:
-
-      # Set to '~' (None) to use the settings below to generate data
-      data_dir: data/Burger1+1D/data/uni0
-      copy_data: True
     space:
       x:
         extent: [-2, 4]
@@ -28,14 +23,10 @@ parameter_space:
           size: 8
       weight_function: uniform
     NeuralNet:
-      num_layers: 4
-      nodes_per_layer: 20
+      num_layers: 1
+      nodes_per_layer: 2
       activation_funcs:
         0: relu
-        1: relu
-        2: relu
-        3: relu
-        4: linear
     variational_form: 1
     Training:
       boundary: lower

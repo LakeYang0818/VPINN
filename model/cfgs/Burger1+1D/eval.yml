@@ -24,7 +24,7 @@ frames:
     data:
       path: VPINN/predictions
       transform:
-        - .isel: [!dag_prev , {y: !slice [~, ~, 32]}]
+        - .isel: [!dag_prev , {y: !slice [~, ~, 33]}]
   col: y
 loss:
   based_on: loss
@@ -43,7 +43,7 @@ boundary_conditions:
     - .creator.universe
     - .plot.facet_grid.scatter
   select:
-    vals: data/u_exact_boundary
+    vals: data/training_data
   transform:
     - .sel: [!dag_tag vals , {'variable': 'x'}]
       kwargs:
