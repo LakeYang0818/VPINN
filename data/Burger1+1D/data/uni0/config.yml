@@ -1,0 +1,43 @@
+---
+VPINN:
+  NeuralNet:
+    activation_funcs: {0: relu}
+    nodes_per_layer: 2
+    num_layers: 1
+    optimizer: Adam
+  PDE:
+    Burger: {nu: 0}
+    Helmholtz: {k: -2.5}
+    PorousMedium: {m: 2}
+    function: Burger1+1D
+    type: Burger
+  Training: {batch_size: 1, boundary: lower, boundary_loss_weight: 1, device: cpu,
+    learning_rate: 0.001, variational_loss_weight: 1, write_time: true}
+  load_data: {copy_data: false, data_dir: null, print_tree: false}
+  predictions_grid:
+    x: {size: 100}
+    y: {size: 100}
+  space:
+    x:
+      extent: [-2, 4]
+      size: 300
+    y:
+      extent: [0.1, 2]
+      size: 80
+  test_functions:
+    num_functions:
+      n_x: {size: 15}
+      n_y: {size: 8}
+    type: Legendre
+    weight_function: uniform
+  variational_form: 1
+log_levels: {backend: warning, model: info}
+monitor_emit_interval: 2.0
+num_epochs: 1
+num_steps: 3
+output_dir: /Users/thomasgaskin/utopya_output/VPINN/221026-212300_Burger1+1D/data/uni0
+output_path: /Users/thomasgaskin/utopya_output/VPINN/221026-212300_Burger1+1D/data/uni0/data.h5
+root_model_name: VPINN
+seed: 42
+write_every: 1
+write_start: 1

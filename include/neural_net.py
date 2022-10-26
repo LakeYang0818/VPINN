@@ -120,7 +120,7 @@ class NeuralNet(nn.Module):
                 f"Choose from: [1, 2, 3]"
             )
 
-        super(NeuralNet, self).__init__()
+        super().__init__()
         self.flatten = nn.Flatten()
 
         self.input_dim = input_size
@@ -141,14 +141,6 @@ class NeuralNet(nn.Module):
 
         # Get the optimizer
         self.optimizer = self.OPTIMIZERS[optimizer](self.parameters(), lr=learning_rate)
-
-        # Initialize the loss tracker dictionary, which can be used to later evaluate the training progress
-        self._loss_tracker: dict = {
-            "iter": [],
-            "total_loss": [],
-            "loss_b": [],
-            "loss_v": [],
-        }
 
         # Get equation type and variational form
         self._eq_type = eq_type

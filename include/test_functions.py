@@ -310,10 +310,7 @@ def tf_simple_evaluation(
     for j, idx in enumerate(
         test_function_indices.data.reshape((-1, grid.attrs["grid_dimension"]))
     ):
-        # tf_res = [test_function_vec(pt, index=idx, d=d * np.ones(grid.attrs["grid_dimension"]),
-        #                             type=type) for pt in grid.data]
-        # ds = xr.Data
-        # print(tf_res)
+
         # Evaluate the test function on all the grid points, expanding the dataset to have the
         # test function indices as additional coordinates
         ds = xr.apply_ufunc(

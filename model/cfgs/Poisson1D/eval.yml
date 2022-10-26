@@ -46,7 +46,7 @@ grid_boundary:
 boundary_conditions:
   based_on: grid_boundary2d
   select:
-    vals: data/u_exact_boundary
+    vals: data/training_data
   transform:
     - .isel: [ !dag_prev , { variable: 0 } ]
       kwargs:

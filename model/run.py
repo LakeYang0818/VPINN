@@ -44,10 +44,10 @@ class VPINN:
         grid: xr.DataArray,
         training_data: xr.Dataset = None,
         f_integrated: xr.DataArray,
-        test_func_values: xr.DataArray,
-        d1test_func_values: xr.DataArray = None,
-        d2test_func_values: xr.DataArray = None,
-        d1test_func_values_boundary: xr.DataArray = None,
+        test_function_values: xr.DataArray,
+        d1_test_function_values: xr.DataArray = None,
+        d2_test_function_values: xr.DataArray = None,
+        d1_test_function_values_boundary: xr.DataArray = None,
         weight_function: callable = lambda x: 1,
         **__,
     ):
@@ -144,7 +144,7 @@ class VPINN:
                     torch.from_numpy(
                         training_data.sel(
                             variable=["normals_" + str(dim)], drop=True
-                        ).data.to_numpy()
+                        ).boundary_data.to_numpy()
                     ).float()
                 )
 
@@ -216,7 +216,7 @@ class VPINN:
             torch.from_numpy(
                 training_data.sel(
                     variable=grid.attrs["space_dimensions"], drop=True
-                ).data.to_numpy()
+                ).boundary_data.to_numpy()
             )
             .float()
             .to(device)
@@ -231,7 +231,7 @@ class VPINN:
         # Training data (boundary conditions)
         self.training_data: torch.Tensor = (
             torch.from_numpy(
-                training_data.sel(variable=["u"], drop=True).data.to_numpy()
+                training_data.sel(variable=["u"], drop=True).boundary_data.to_numpy()
             )
             .float()
             .to(device)
@@ -243,25 +243,18 @@ class VPINN:
         ).to(device)
 
         # Test function values on the grid interior, indexed by their (multi-)index and grid coordinate
-        self.test_func_values: torch.Tensor = _tf_to_tensor(
-            test_func_values.transpose("tf_idx", ...)
-        )
+        self.test_func_values: torch.Tensor = _tf_to_tensor(test_function_values)
 
         self.d1test_func_values: Union[None, torch.Tensor] = _dtf_to_tensor(
-            d1test_func_values.transpose("tf_idx", ...)
+            d1_test_function_values
         )
 
         self.d2test_func_values: Union[None, xr.DataArray] = _dtf_to_tensor(
-            d2test_func_values.transpose("tf_idx", ...)
+            d2_test_function_values
         )
 
         self.d1test_func_values_boundary: torch.Tensor = (
-            torch.from_numpy(
-                d1test_func_values_boundary.transpose("tf_idx", ...)
-                .to_array()
-                .squeeze()
-                .data
-            )
+            torch.from_numpy(d1_test_function_values_boundary.to_array().squeeze().data)
             .float()
             .to(device)
         )
@@ -271,7 +264,7 @@ class VPINN:
                 torch.stack(
                     [
                         weight_function(np.array(idx))
-                        for idx in test_func_values.coords["tf_idx"].data
+                        for idx in test_function_values.coords["tf_idx"].data
                     ]
                 ),
                 (-1, 1),
@@ -359,7 +352,7 @@ if __name__ == "__main__":
 
     log.note("   Preparing model run ...")
     log.note(f"   Loading config file:\n        {cfg_file_path}")
-    with open(cfg_file_path, "r") as cfg_file:
+    with open(cfg_file_path) as cfg_file:
         cfg = yaml.load(cfg_file, Loader=yaml.Loader)
     model_name = cfg.get("root_model_name", "VPINN")
     log.note(f"   Model name:  {model_name}")
@@ -418,12 +411,11 @@ if __name__ == "__main__":
     # Get the data: grid, test function data, and training data. This is loaded from a file,
     # if provided, else synthetically generated
     data: dict = this.get_data(
-        model_cfg.get("load_from_file", None),
+        model_cfg.get("load_data", {}),
         model_cfg["space"],
         test_func_dict,
         solution=this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
         forcing=this.EXAMPLES[model_cfg["PDE"]["function"]]["f"],
-        var_form=model_cfg["variational_form"],
         boundary_isel=model_cfg["Training"].get("boundary", None),
         h5file=h5file,
     )

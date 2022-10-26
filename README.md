@@ -60,6 +60,18 @@ utopya models register from-manifest model/VPINN_info.yml
 ```
 Done! 🎉
 
+#### 4. Download data using git LFS (optional)
+The repository contains some pre-processed grid and test function data, which speeds up running models considerably,
+since you do not need to generate the training data. These files are stored using [git LFS](https://git-lfs.github.com)
+(large file storage). To download them, first install git lfs via
+```console
+git lfs install
+```
+This assumes you have the git command line extension installed. Then, from within the repo, do
+```console
+git lfs pull
+```
+This will pull all the datasets.
 
 ## How to run a model
 Now you have set up the model, run it by invoking the basic run command
@@ -265,8 +277,29 @@ can be specified under `worker_managers/num_workers` on the root-level configura
 If you thus set `num_workers` to 4 and `num_threads` to 3, you will in total be able to use 12 threads.
 
 
-## 🚧 Loading data (WIP)
-TODO
+## Loading data
+Once you have generated grid and test function data, you can reuse it to train the neural net repeatedly. This will
+speed up computations enormously, and also allow sweep runs with different neural net configurations.
+To load a dataset, pass the path to the directory containing the `.h5` file to load to the load configuration entry of the config:
+
+```yaml
+VPINN:
+  load_data:
+    data_dir: path/to/folder
+```
+This will load all the required data and train the model on it; it will however not copy the loaded data to the
+new directory by default, in order to conserve disk space. If you want the test function and grid data stored alongside the
+neural net data (e.g. for data analysis and plotting purposes), set ``copy_data`` to true:
+
+```yaml
+VPINN:
+  load_data:
+    data_dir: path/to/folder
+    copy_data: True
+```
+
+To turn off data loading, set the ``data_dir`` entry to ``~`` (``None`` in yaml), or delete the
+``load_data`` entry entirely.
 
 ## Parameter sweeps
 > **_Note_**: Take a look at the [full tutorial entry](https://docs.utopia-project.org/html/getting_started/tutorial.html#parameter-sweeps)
