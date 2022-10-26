@@ -8,6 +8,9 @@ parameter_space:
 
       # Set to '~' (None) to use the settings below to generate data
       data_dir: data/Burger1+1D/data/uni0
+
+      # Turn this off to save disk space: the training data is about 50 MB.
+      # Turning this off will cause some plots to fail.
       copy_data: True
     space:
       x:

@@ -60,6 +60,18 @@ utopya models register from-manifest model/VPINN_info.yml
 ```
 Done! 🎉
 
+#### 4. Download data using git LFS (optional)
+The repository contains some pre-processed grid and test function data, which speeds up running models considerably,
+since you do not need to generate the training data. These files are stored using [git LFS](https://git-lfs.github.com)
+(large file storage). To download them, first install git lfs via
+```console
+git lfs install
+```
+This assumes you have the git command line extension installed. Then, from within the repo, do
+```console
+git lfs pull
+```
+This will pull all the datasets.
 
 ## How to run a model
 Now you have set up the model, run it by invoking the basic run command
