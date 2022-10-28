@@ -1,0 +1,1533 @@
+diff --git a/README.md b/README.md
+index 339a343..70b130d 100644
+--- a/README.md
++++ b/README.md
+@@ -310,9 +310,11 @@ Note that the indexing range of the boundary begins (for two-dimensional grids)
+ grid boundary anti-clockwise. For three dimensional grids, the index begins on the lower left corner of the
+ front panel, wraps anti-clockwise around the sides, then selects the upper, and finally the lower panel.
+
+-## Loading data
+-Once you have generated grid and test function data, you can reuse it to train the neural net repeatedly. This will
++## Generating and loading grid and test function data
++You can generate and reuse grid and test function data to train the neural net repeatedly. This will
+ speed up computations enormously, and also allow sweep runs with different neural net configurations.
++
++To generate data, set
+ To load a dataset, pass the path to the directory containing the `.h5` file to load to the load configuration entry of the config:
+
+ ```yaml
+@@ -330,8 +332,22 @@ VPINN:
+     data_dir: path/to/folder
+     copy_data: True
+ ```
++You may also wish to generate a large dataset of many test functions in advance, but then
++train the model on a smaller subset. This can be done by adding the following entry to the
++``load_data`` key:
++
++```yaml
++load_data:
++  test_function_subset:
++    n_x: !slice [~, 4]   # Chooses the first four test functions in x direction.
++```
++Use the ``!slice`` tag to make a selection using the standard python ``start:stop:step`` syntax, with ``~`` indicating ``None`` in yaml.
++For example, ``!slice [~, ~, 2]`` would select every second test function.
++
++> **_Warning_**:
++> Make sure the names of the test function indices (``n_x`` in this example) match the keys in the dataset.
+
+-To turn off data loading, set the ``data_dir`` entry to ``~`` (``None`` in yaml), or delete the
++To turn off data loading, set the ``data_dir`` key to ``~`` (``None`` in yaml), or delete the
+ ``load_data`` entry entirely.
+
+ ## Parameter sweeps
+diff --git a/model/DataGeneration.py b/model/DataGeneration.py
+index 2db4ed4..665c7d9 100644
+--- a/model/DataGeneration.py
++++ b/model/DataGeneration.py
+@@ -2,7 +2,7 @@ import copy
+ import logging
+ import sys
+ from os.path import dirname as up
+-from typing import Union
++from typing import Sequence, Union
+
+ import h5py as h5
+ import paramspace
+@@ -18,244 +18,181 @@ sys.path.append(up(up(__file__)))
+ base = import_module_from_path(mod_path=up(up(__file__)), mod_str="include")
+
+
+-# ----------------------------------------------------------------------------------------------------------------------
+-# -- Load or generate grid and training data ---------------------------------------------------------------------------
+-# ----------------------------------------------------------------------------------------------------------------------
+-
+-
+-def get_data(
++def load_grid_tf_data(
++    data_dir: str,
+     load_cfg: dict,
+-    space_dict: dict,
+-    test_func_dict: dict,
+-    *,
+-    solution: callable,
+-    forcing: callable,
+-    boundary_isel: Union[str, tuple] = None,
+-    h5file: h5.File,
+ ) -> dict:
+
+-    """Returns the grid and test function data, either by loading it from a file or generating it.
+-    If generated, data is to written to the output folder
+-
+-    :param load_cfg: load configuration, containing the path to the data file. If the path is None, data is
+-         automatically generated. If the ``copy_data`` entry is true, data will be copied and written to the
+-         output directory; however, this is false by default to save disk space.
+-         The configuration also contains further kwargs, passed to the loader.
+-    :param space_dict: the dictionary containing the space configuration
+-    :param test_func_dict: the dictionary containing the test function configuration
+-    :param solution: the explicit solution (to be evaluated on the grid boundary)
+-    :param forcing: the external function
+-    :param var_form: the variational form to use
+-    :param boundary_isel: (optional) section of the boundary to use for training. Can either be a string ('lower',
+-        'upper', 'left', 'right') or a range.
+-    :param h5file: the h5file to write data to. A new group is added to this file.
++    """Loads grid and test function data from an h5 file. If a test function subselection is specified,
++    selects a subset of test functions.
+
+-    :return: data: a dictionary containing the grid and test function data
++    :param data_dir: (str) the directory containing the h5 file
++    :param load_cfg: (dict) load settings, passed to :pyfunc:utopya.eval.datamanager.DataManager.load
++    :return: a dictionary containing the grid and test function data
+     """
+
+-    # TODO: allow selection of which data to load
+-    # TODO: allow passing Sequences of boundary sections, e.g. ['lower', 'upper']
+-    # TODO: Do not generate separate h5Group?
+-    # TODO: re-writing loaded data not possible
++    log.info("   Loading data ...")
+
+-    # Collect datasets in a dictionary, passed to the model
+     data = {}
+
+-    # The directory from which to load data
+-    data_dir = load_cfg.pop("data_dir", None)
++    # A subset of test functions can be selected to reduce compute time
++    tf_sel_dict = {
++        key: val for key, val in load_cfg.pop("test_function_subset", {}).items()
++    }
+
+-    if data_dir is not None:
++    dm = utopya.eval.datamanager.DataManager(data_dir=data_dir, out_dir=False)
+
+-        # --------------------------------------------------------------------------------------------------------------
+-        # --- Load data ------------------------------------------------------------------------------------------------
+-        # --------------------------------------------------------------------------------------------------------------
++    dm.load(
++        "VPINN_data",
++        loader=load_cfg.pop("loader", "hdf5"),
++        glob_str=load_cfg.pop("glob_str", "*.h5"),
++        print_tree=load_cfg.pop("print_tree", False),
++        **load_cfg,
++    )
+
+-        log.info("   Loading data ...")
++    for key in list(dm["VPINN_data"]["data"]["grid_test_function_data"].keys()):
+
+-        # If data is loaded, determine whether to copy that data to the new output directory.
+-        # This is false by default to save disk storage
+-        copy_data = load_cfg.pop("copy_data", False)
++        # Get the dataset and convert to xr.DataArray
++        ds = dm["VPINN_data"]["data"]["grid_test_function_data"][key]
++        data[key] = ds.data
+
+-        dm = utopya.eval.datamanager.DataManager(data_dir=data_dir, out_dir=False)
++        # These entries are xr.Datasets, rather than xr.DataArrays
++        if key in [
++            "grid_boundary",
++            "d1_test_function_values_boundary",
++        ]:
++            data[key] = ds.data.to_dataset()
++
++        # Manually copy attributes
++        for attr in [
++            ("grid_density", lambda x: float(x)),
++            ("grid_dimension", lambda x: int(x)),
++            ("space_dimensions", lambda x: [str(_) for _ in x]),
++            ("test_function_dims", lambda x: [str(_) for _ in x]),
++        ]:
++            if attr[0] in ds.attrs.keys():
++                data[key].attrs[attr[0]] = attr[1](ds.attrs[attr[0]])
+
+-        dm.load(
+-            "VPINN_data",
+-            loader=load_cfg.pop("loader", "hdf5"),
+-            glob_str=load_cfg.pop("glob_str", "*.h5"),
+-            print_tree=load_cfg.pop("print_tree", False),
+-            **load_cfg,
++    # Stack the test function indices into a single multi-index
++    for key in [
++        "test_function_values",
++        "d1_test_function_values",
++        "d2_test_function_values",
++        "d1_test_function_values_boundary",
++    ]:
++        data[key] = (
++            data[key]
++            .sel(tf_sel_dict)
++            .stack(tf_idx=data[key].attrs["test_function_dims"])
++            .transpose("tf_idx", ...)
+         )
+
+-        for key in list(dm["VPINN_data"]["data"]["data"].keys()):
+-
+-            # Get the dataset and convert to xr.DataArray
+-            ds = dm["VPINN_data"]["data"]["data"][key]
+-            data[key] = ds.data
+-
+-            # These entries should be xr.Datasets
+-            if key in [
+-                "training_data",
+-                "grid_boundary",
+-                "d1_test_function_values_boundary",
+-            ]:
+-                data[key] = ds.data.to_dataset()
+-
+-            # Manually copy attributes
+-            for attr in [
+-                ("grid_density", lambda x: float(x)),
+-                ("grid_dimension", lambda x: int(x)),
+-                ("space_dimensions", lambda x: [str(_) for _ in x]),
+-                ("test_function_dims", lambda x: [str(_) for _ in x]),
+-            ]:
+-                if attr[0] in ds.attrs.keys():
+-
+-                    data[key].attrs[attr[0]] = attr[1](ds.attrs[attr[0]])
+-
+-        # Rename data
+-        data["training_data"] = data["training_data"].rename(
+-            {"training_data": "boundary_data"}
+-        )
++    data["grid_boundary"] = data["grid_boundary"].rename(
++        {"grid_boundary": "boundary_data"}
++    )
+
+-        # Stack the test function indices into a single multi-index
+-        for key in [
+-            "test_function_values",
+-            "d1_test_function_values",
+-            "d2_test_function_values",
+-            "d1_test_function_values_boundary",
+-            "f_integrated",
+-        ]:
+-            data[key] = (
+-                data[key]
+-                .stack(tf_idx=data[key].attrs["test_function_dims"])
+-                .transpose("tf_idx", ...)
+-            )
++    log.info("   Data loaded.")
++
++    return data
+
+-        log.info("   All data loaded")
+
+-        if not copy_data:
+-            return data
+-    else:
++def generate_grid_tf_data(
++    space_dict: dict,
++    test_func_dict: dict,
++) -> dict:
+
+-        # --------------------------------------------------------------------------------------------------------------
+-        # --- Generate data --------------------------------------------------------------------------------------------
+-        # --------------------------------------------------------------------------------------------------------------
+-
+-        if len(space_dict) != len(test_func_dict["num_functions"]):
+-            raise ValueError(
+-                f"Space and test function dimensions do not match! "
+-                f"Got {len(space_dict)} and {len(test_func_dict['num_functions'])}."
+-            )
+-
+-        log.info("   Generating data ...")
+-
+-        log.debug("   Constructing the grid ... ")
+-        grid: xr.DataArray = base.construct_grid(space_dict)
+-        boundary: xr.Dataset = base.get_boundary(grid)
+-        data["grid"] = grid
+-        data["grid_boundary"] = boundary
+-        training_boundary = (
+-            boundary
+-            if boundary_isel is None
+-            else base.get_boundary_isel(boundary, boundary_isel, grid)
+-        )
+-        log.note("   Constructed the grid.")
+-
+-        # The test functions are only defined on [-1, 1], so a separate grid is used to generate
+-        # test function values
+-        tf_space_dict = paramspace.tools.recursive_replace(
+-            copy.deepcopy(space_dict),
+-            select_func=lambda d: "extent" in d,
+-            replace_func=lambda d: d.update(dict(extent=[-1, 1])) or d,
+-        )
++    """Generates grid and test function data.
+
+-        tf_grid: xr.DataArray = base.construct_grid(tf_space_dict)
+-        tf_boundary: xr.Dataset = base.get_boundary(tf_grid)
++    :param space_dict: the configuration for the space grid
++    :param test_func_dict: the configuration for the test function grid
++    :return: a dictionary containing the grid and test function data
++    """
++    data = {}
+
+-        log.debug("   Evaluating test functions on grid ...")
+-        test_function_indices = base.construct_grid(
+-            test_func_dict["num_functions"], lower=1, dtype=int
+-        )
+-        test_function_values = base.tf_grid_evaluation(
+-            tf_grid, test_function_indices, type=test_func_dict["type"], d=0
++    if len(space_dict) != len(test_func_dict["num_functions"]):
++        raise ValueError(
++            f"Space and test function dimensions do not match! "
++            f"Got {len(space_dict)} and {len(test_func_dict['num_functions'])}."
+         )
+
+-        log.note("   Evaluated the test functions.")
+-        data["test_function_values"] = test_function_values.stack(
+-            tf_idx=test_function_values.attrs["test_function_dims"]
+-        ).transpose("tf_idx", ...)
++    log.info("   Generating grid and test function data ...")
++
++    log.debug("   Constructing the grid ... ")
++    grid: xr.DataArray = base.construct_grid(space_dict)
++    boundary: xr.Dataset = base.get_boundary(grid)
++    data["grid"] = grid
++    data["grid_boundary"] = boundary
++
++    # The test functions are only defined on [-1, 1], so a separate grid is used to generate
++    # test function values
++    log.debug("   Constructing the test function grid ...")
++    tf_space_dict = paramspace.tools.recursive_replace(
++        copy.deepcopy(space_dict),
++        select_func=lambda d: "extent" in d,
++        replace_func=lambda d: d.update(dict(extent=[-1, 1])) or d,
++    )
+
+-        log.debug("   Evaluating test function derivatives on grid ... ")
+-        d1_test_function_values = base.tf_grid_evaluation(
+-            tf_grid, test_function_indices, type=test_func_dict["type"], d=1
+-        )
++    tf_grid: xr.DataArray = base.construct_grid(tf_space_dict)
++    tf_boundary: xr.Dataset = base.get_boundary(tf_grid)
+
+-        data["d1_test_function_values"] = d1_test_function_values.stack(
+-            tf_idx=test_function_values.attrs["test_function_dims"]
+-        ).transpose("tf_idx", ...)
++    # Evaluate the test functions on the grid, using fast grid evaluation
++    log.debug("   Evaluating test functions on grid ...")
++    test_function_indices = base.construct_grid(
++        test_func_dict["num_functions"], lower=1, dtype=int
++    )
++    test_function_values = base.tf_grid_evaluation(
++        tf_grid, test_function_indices, type=test_func_dict["type"], d=0
++    )
++    data["test_function_values"] = test_function_values.stack(
++        tf_idx=test_function_values.attrs["test_function_dims"]
++    ).transpose("tf_idx", ...)
+
+-        d1_test_function_values_boundary = base.tf_simple_evaluation(
+-            tf_boundary.sel(variable=tf_grid.attrs["space_dimensions"]),
+-            test_function_indices,
+-            type=test_func_dict["type"],
+-            d=1,
+-            core_dim="variable",
+-        )
+-        data[
+-            "d1_test_function_values_boundary"
+-        ] = d1_test_function_values_boundary.stack(
+-            tf_idx=test_function_values.attrs["test_function_dims"]
+-        ).transpose(
+-            "tf_idx", ...
+-        )
++    log.debug("   Evaluating test function derivatives on grid ... ")
++    d1_test_function_values = base.tf_grid_evaluation(
++        tf_grid, test_function_indices, type=test_func_dict["type"], d=1
++    )
+
+-        log.debug("   Evaluating test function second derivatives on grid ... ")
+-        d2_test_function_values = base.tf_grid_evaluation(
+-            tf_grid, test_function_indices, type=test_func_dict["type"], d=2
+-        )
+-        data["d2_test_function_values"] = d2_test_function_values.stack(
+-            tf_idx=test_function_values.attrs["test_function_dims"]
+-        ).transpose("tf_idx", ...)
++    data["d1_test_function_values"] = d1_test_function_values.stack(
++        tf_idx=test_function_values.attrs["test_function_dims"]
++    ).transpose("tf_idx", ...)
+
+-        log.debug("   Evaluating the external function on the grid ...")
+-        f_evaluated: xr.DataArray = xr.apply_ufunc(
+-            forcing, grid, input_core_dims=[["idx"]], vectorize=True
+-        )
+-        data["f_evaluated"] = f_evaluated
+-
+-        log.debug("   Integrating the function over the grid ...")
+-        f_integrated = base.integrate_xr(f_evaluated, test_function_values)
+-        data["f_integrated"] = f_integrated.stack(
+-            tf_idx=f_integrated.attrs["test_function_dims"]
+-        ).transpose("tf_idx", ...)
+-
+-        log.debug("   Evaluating the solution on the boundary ...")
+-        training_data: xr.Dataset = xr.concat(
+-            [
+-                training_boundary,
+-                xr.apply_ufunc(
+-                    solution,
+-                    training_boundary.sel(variable=grid.attrs["space_dimensions"]),
+-                    input_core_dims=[["variable"]],
+-                    vectorize=True,
+-                ).assign_coords(variable=("variable", ["u"])),
+-            ],
+-            dim="variable",
+-        )
+-        data["training_data"] = training_data
++    log.debug("   Evaluating test function second derivatives on grid ... ")
++    d2_test_function_values = base.tf_grid_evaluation(
++        tf_grid, test_function_indices, type=test_func_dict["type"], d=2
++    )
++    data["d2_test_function_values"] = d2_test_function_values.stack(
++        tf_idx=test_function_values.attrs["test_function_dims"]
++    ).transpose("tf_idx", ...)
++
++    # Evaluate the test function derivatives on the grid boundary
++    d1_test_function_values_boundary = base.tf_simple_evaluation(
++        tf_boundary.sel(variable=tf_grid.attrs["space_dimensions"]),
++        test_function_indices,
++        type=test_func_dict["type"],
++        d=1,
++        core_dim="variable",
++    )
++    data["d1_test_function_values_boundary"] = d1_test_function_values_boundary.stack(
++        tf_idx=test_function_values.attrs["test_function_dims"]
++    ).transpose("tf_idx", ...)
+
+-        log.info("   Generated data.")
+-    # ------------------------------------------------------------------------------------------------------------------
+-    # --- Set up chunked dataset to store the state data in ------------------------------------------------------------
+-    # ------------------------------------------------------------------------------------------------------------------
++    log.info("   Generated grid and test function data.")
++
++    return data
+
+-    log.info("   Saving data ... ")
+-    data_group = h5file.create_group("data")
+
+-    # ------------------------------------------------------------------------------------------------------------------
+-    # --- Grid and grid boundary ---------------------------------------------------------------------------------------
+-    # ------------------------------------------------------------------------------------------------------------------
++def save_grid_tf_data(data: dict, h5file: h5.File):
+
+-    # Grid
++    """Saves the grid and test function data to a h5 file
++
++    :param data: the dictionary containing the data
++    :param h5file: the h5.File to save the data to
++    """
++
++    log.info("   Saving data ... ")
++    data_group = h5file.create_group("grid_test_function_data")
++
++    # Initialise grid dataset
+     grid = data["grid"]
+     dset_grid = data_group.create_dataset(
+         "grid",
+@@ -300,11 +237,7 @@ def get_data(
+         :,
+     ] = data["grid_boundary"].to_array()
+
+-    # ------------------------------------------------------------------------------------------------------------------
+-    # --- Test function values -----------------------------------------------------------------------------------------
+-    # ------------------------------------------------------------------------------------------------------------------
+-
+-    # Test function values
++    # Initialise test function values datasets
+     test_function_values = data["test_function_values"].unstack()
+     dset_test_function_values = data_group.create_dataset(
+         "test_function_values",
+@@ -408,83 +341,123 @@ def get_data(
+         :,
+     ] = d1_test_function_values_boundary
+
+-    # ------------------------------------------------------------------------------------------------------------------
+-    # --- External forcing ---------------------------------------------------------------------------------------------
+-    # ------------------------------------------------------------------------------------------------------------------
++    log.info("   All data saved.")
+
+-    # External function evaluated on the grid
+-    f_evaluated = data["f_evaluated"]
+-    dset_f_evaluated = data_group.create_dataset(
+-        "f_evaluated",
+-        list(f_evaluated.sizes.values()),
+-        maxshape=list(f_evaluated.sizes.values()),
+-        chunks=True,
+-        compression=3,
+-    )
+-    dset_f_evaluated.attrs["dim_names"] = [str(_) for _ in list(f_evaluated.sizes)]
+
+-    # Set the attributes
+-    for idx in list(f_evaluated.sizes):
+-        dset_f_evaluated.attrs["coords_mode__" + str(idx)] = "values"
+-        dset_f_evaluated.attrs["coords__" + str(idx)] = grid.coords[idx].data
+-    dset_f_evaluated.attrs.update(f_evaluated.attrs)
++def get_grid_tf_data(
++    load_cfg: dict,
++    space_dict: dict,
++    test_func_dict: dict,
++    h5file: h5.File,
++) -> dict:
+
+-    # Write the data
+-    dset_f_evaluated[
+-        :,
+-    ] = f_evaluated
+-
+-    # Integral of the forcing against the test functions.
+-    # This dataset is indexed by the test function indices
+-    f_integrated = data["f_integrated"].unstack()
+-    dset_f_integrated = data_group.create_dataset(
+-        "f_integrated",
+-        list(f_integrated.sizes.values()),
+-        maxshape=list(f_integrated.sizes.values()),
+-        chunks=True,
+-        compression=3,
+-    )
+-    dset_f_integrated.attrs["dim_names"] = [str(_) for _ in list(f_integrated.sizes)]
++    """Returns the grid and test function data, either by loading it from a file or generating it.
++    If generated, data is written to the output folder
+
+-    # Set attributes
+-    for idx in list(f_integrated.sizes):
+-        dset_f_integrated.attrs["coords_mode__" + str(idx)] = "values"
+-        dset_f_integrated.attrs["coords__" + str(idx)] = f_integrated.coords[idx].data
+-    dset_f_integrated.attrs.update(f_integrated.attrs)
++    :param load_cfg: load configuration, containing the path to the data file. If the path is None, data is
++         automatically generated. If the ``copy_data`` entry is true, data will be copied and written to the
++         output directory; however, this is false by default to save disk space.
++         The configuration also contains further kwargs, passed to the loader.
++    :param space_dict: the dictionary containing the space configuration
++    :param test_func_dict: the dictionary containing the test function configuration
++    :param h5file: the h5file to write data to. A new group is added to this file.
+
+-    # Write data
+-    dset_f_integrated[
+-        :,
+-    ] = f_integrated
+-
+-    # ------------------------------------------------------------------------------------------------------------------
+-    # --- Boundary training data ---------------------------------------------------------------------------------------
+-    # ------------------------------------------------------------------------------------------------------------------
+-
+-    # Training data: values of the test function on the boundary
+-    training_data = data["training_data"]
+-    dset_training_data = data_group.create_dataset(
+-        "training_data",
+-        list(training_data.sizes.values()),
+-        maxshape=list(training_data.sizes.values()),
+-        chunks=True,
+-        compression=3,
+-    )
+-    dset_training_data.attrs["dim_names"] = [str(_) for _ in list(training_data.sizes)]
+-    dset_training_data.attrs.update(training_data.attrs)
++    :return: data: a dictionary containing the grid and test function data
++    """
+
+-    # Set attributes
+-    dset_training_data.attrs["coords_mode__idx"] = "trivial"
+-    dset_training_data.attrs["coords_mode__variable"] = "values"
+-    dset_training_data.attrs["coords__variable"] = [
+-        str(_) for _ in training_data.coords["variable"].data
+-    ]
++    # The directory from which to load data
++    data_dir = load_cfg.pop("data_dir", None)
+
+-    # Write data
+-    dset_training_data[
+-        :,
+-    ] = training_data.to_array()
++    # Load data
++    if data_dir is not None:
+
+-    log.info("   All data saved.")
++        # If data is loaded, determine whether to copy that data to the new output directory.
++        # This is false by default to save disk storage
++        copy_data = load_cfg.pop("copy_data", False)
++
++        data = load_grid_tf_data(data_dir, load_cfg)
++
++        # If data is not copied to the new output folder, return data
++        if not copy_data:
++            return data
++
++    # Generate data
++    else:
++
++        data = generate_grid_tf_data(space_dict, test_func_dict)
++
++    # Save the data and return
++    save_grid_tf_data(data, h5file)
+
+     return data
++
++
++def get_training_data(
++    *,
++    func: callable,
++    grid: xr.DataArray,
++    boundary: xr.Dataset,
++    boundary_isel: Union[Sequence[Union[str, slice]], str, slice, None],
++) -> dict:
++
++    """Obtains the training data, given by the boundary conditions on a specified grid boundary.
++
++    :param func: the function to evaluate on the boundary
++    :param grid: the grid data
++    :param boundary: the grid boundary
++    :param boundary_isel: the boundary selection, i.e. which part of the boundary to use as training data
++    :return: a dictionary containing the training data
++    """
++
++    # Get the training boundary
++    log.debug("   Obtaining the training boundary ...")
++    training_boundary = (
++        boundary
++        if boundary_isel is None
++        else base.get_boundary_isel(boundary, boundary_isel, grid)
++    )
++
++    # Evaluate the function on the training boundary
++    log.debug("   Evaluating the solution on the boundary ...")
++    training_data: xr.Dataset = xr.concat(
++        [
++            training_boundary,
++            xr.apply_ufunc(
++                func,
++                training_boundary.sel(variable=grid.attrs["space_dimensions"]),
++                input_core_dims=[["variable"]],
++                vectorize=True,
++            ).assign_coords(variable=("variable", ["u"])),
++        ],
++        dim="variable",
++    )
++
++    return dict(training_data=training_data)
++
++
++def get_forcing_data(
++    *,
++    func: callable,
++    grid: xr.DataArray,
++    test_function_values: xr.DataArray,
++) -> dict:
++
++    """Integrates a function against an xr.DataArray of test functions.
++
++    :param func: the function to integrate
++    :param grid: the grid
++    :param test_function_values: the test function values
++    :return: a dictionary containing the function integrated
++    """
++
++    log.debug("   Evaluating the external function on the grid ...")
++    f_evaluated: xr.DataArray = xr.apply_ufunc(
++        func, grid, input_core_dims=[["idx"]], vectorize=True
++    )
++
++    log.debug("   Integrating the function over the grid ...")
++    f_integrated: xr.DataArray = base.integrate_xr(
++        f_evaluated, test_function_values
++    ).transpose("tf_idx", ...)
++
++    return dict(f_evaluated=f_evaluated, f_integrated=f_integrated)
+diff --git a/model/VPINN_base_plots.yml b/model/VPINN_base_plots.yml
+index 0fcec96..b81a58b 100644
+--- a/model/VPINN_base_plots.yml
++++ b/model/VPINN_base_plots.yml
+@@ -67,6 +67,19 @@
+   select_and_combine:
+     base_path: *base_path
+
++
++# Plot a function on a two-dimensional domain
++heatmap:
++  based_on:
++    - .creator.universe
++    - .plot.facet_grid.pcolormesh
++  cmap: &cmap
++    continuous: true
++    from_values:
++      0: *darkblue
++      0.5: *red
++      1: *yellow
++
+ # ======================================================================================================================
+ #  ╔═╗╦  ╔═╗╔╦╗╔═╗
+ #  ╠═╝║  ║ ║ ║ ╚═╗
+@@ -89,6 +102,21 @@ loss:
+     set_scales:
+       y: log
+
++f_integrated_2D:
++  based_on: heatmap
++  select:
++    data: VPINN/f_integrated
++  x: n_x
++  y: n_y
++  helpers:
++    set_tick_locators:
++      x: &formatting
++        major:
++          name: MaxNLocator
++          integer: true
++      y:
++        <<: *formatting
++
+ # ======================================================================================================================
+ #  ╔═╗╦═╗╦╔╦╗  ╔═╗╦  ╔═╗╔╦╗╔═╗
+ #  ║ ╦╠╦╝║ ║║  ╠═╝║  ║ ║ ║ ╚═╗
+@@ -101,7 +129,7 @@ grid1d:
+     - .creator.universe
+     - .plot.facet_grid.scatter
+   select:
+-    grid: data/grid
++    grid: grid_test_function_data/grid
+   transform:
+     - .isel: [!dag_tag grid, {idx: 0} ]
+       kwargs:
+@@ -121,7 +149,7 @@ grid_boundary1d:
+     - .creator.universe
+     - .plot.facet_grid.scatter
+   select:
+-    vals: data/grid_boundary
++    vals: grid_test_function_data/grid_boundary
+   transform:
+     - .isel: [ !dag_prev , { variable: 0 } ]
+       kwargs:
+@@ -153,7 +181,7 @@ grid2d:
+     - .creator.universe
+     - .plot.facet_grid.scatter
+   select:
+-    grid: data/grid
++    grid: grid_test_function_data/grid
+   transform:
+     - .isel: [!dag_tag grid , {idx: 0}]
+       kwargs:
+@@ -176,7 +204,7 @@ grid_boundary2d:
+     - .creator.universe
+     - .plot.facet_grid.scatter
+   select:
+-    vals: data/grid_boundary
++    vals: grid_test_function_data/grid_boundary
+   transform:
+     - .isel: [ !dag_prev , { variable: 0 } ]
+       kwargs:
+@@ -200,7 +228,7 @@ grid3d:
+     - .creator.universe
+     - .plot.facet_grid.scatter3d
+   select:
+-    grid: data/grid
++    grid: grid_test_function_data/grid
+   transform:
+     - .isel: [!dag_prev , {idx: 0}]
+       kwargs:
+@@ -235,7 +263,7 @@ grid_boundary3d:
+     - .creator.universe
+     - .plot.facet_grid.scatter3d
+   select:
+-    vals: data/grid_boundary
++    vals: grid_test_function_data/grid_boundary
+   transform:
+     - .isel: [ !dag_prev , { variable: 0 } ]
+       kwargs:
+@@ -264,22 +292,92 @@ grid_boundary3d:
+ #  ╠═╝╠╦╝║╣  ║║║║   ║ ║║ ║║║║╚═╗
+ #  ╩  ╩╚═╚═╝═╩╝╩╚═╝ ╩ ╩╚═╝╝╚╝╚═╝
+ # ======================================================================================================================
+-line:
++
++# Plots the true and predicted solution
++predictions_1D:
+   based_on:
+     - .creator.universe
+     - .plot.facet_grid.line
++  select:
++    prediction:
++      path: VPINN/predictions
++      transform:
++        - .data: [!dag_prev ]
++    solution:
++      path: VPINN/u_exact
++      transform:
++        - .data: [!dag_prev ]
++  transform:
++    - operation: pd.Index
++      args: [ [ 'prediction', 'exact solution' ] ]
++      kwargs:
++        name: 'kind'
++    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
++      tag: data
++  hue: kind
+
+-# Plot a function on a two-dimensional domain
+-heatmap:
+-  based_on:
+-    - .creator.universe
+-    - .plot.facet_grid.pcolormesh
+-  cmap: &cmap
++# Plots a 2-dimensional prediction
++predictions_2D:
++  based_on: heatmap
++  select:
++    data: VPINN/predictions
++
++# Plots the test functions
++test_functions:
++  based_on: heatmap
++  select:
++    data:
++      path: grid_test_function_data/test_function_values
++  row: n_x
++  col: n_y
++
++# Plot the x-derivatives of the test functions
++d1test_functions_x:
++  based_on: test_functions
++  select:
++    data:
++      path: grid_test_function_data/d1_test_function_values
++      transform:
++        - .sel: [!dag_prev , {idx: 0}]
++          kwargs:
++            drop: True
++  cbar_kwargs:
++    label: $\partial_x \nu_{kl}$
++
++# Plot the y-derivatives of the test functions
++d1test_functions_y:
++  based_on: test_functions
++  select:
++    data:
++      path: grid_test_function_data/d1_test_function_values
++      transform:
++        - .sel: [ !dag_prev , {idx: 1} ]
++          kwargs:
++            drop: True
++  cbar_kwargs:
++    label: $\partial_y \nu_{kl}$
++
++# Plot the norm of the gradient of the test functions
++d1test_functions_norm:
++  based_on: heatmap
++  select:
++    tf_data:
++      path: grid_test_function_data/d1_test_function_values
++  transform:
++    - squared: [!dag_tag tf_data  ]
++    - .sum: [!dag_prev , 'idx']
++      tag: data
++  row: n_x
++  col: n_y
++  cmap:
+     continuous: true
+     from_values:
+-      0: *darkblue
+-      0.5: *red
++      0: *red
++      0.5: *darkblue
+       1: *yellow
++  cbar_kwargs:
++    label: $\Vert \nabla \nu_{kl} \Vert_2$
++
+
+ #u_boundary:
+ #  based_on:
+diff --git a/model/VPINN_cfg.yml b/model/VPINN_cfg.yml
+index 5de9815..0038e65 100644
+--- a/model/VPINN_cfg.yml
++++ b/model/VPINN_cfg.yml
+@@ -22,7 +22,7 @@ PDE:
+   function: !param
+     default: Tanh
+     dtype: str
+-    is_any_of: [Tanh, Tanh2D, SinSin2D, Burger1+1D, DoubleGauss1D, CubedRoot, PorousMedium]
++    is_any_of: [Tanh, Tanh2D, SinSin2D, Burger1+1D, Burger_compact, DoubleGauss1D, CubedRoot, PorousMedium]
+   # Scalar parameters for the equations
+   PorousMedium:
+     m: 2
+diff --git a/model/cfgs/Burger1+1D/eval.yml b/model/cfgs/Burger1+1D/eval.yml
+index 3c357cb..b538b1f 100644
+--- a/model/cfgs/Burger1+1D/eval.yml
++++ b/model/cfgs/Burger1+1D/eval.yml
+@@ -10,10 +10,9 @@
+   lightgreen:     &lightgreen       '#AFD8BC'
+   grey:           &grey             '#3D4244'
+
++#
+ predictions:
+-  based_on: heatmap
+-  select:
+-    data: VPINN/predictions
++  based_on: predictions_2D
+
+ frames:
+   based_on:
+@@ -32,18 +31,12 @@ loss:
+     set_scales:
+       y: log
+
+-grid:
+-  based_on: grid2d
+-
+-grid_boundary:
+-  based_on: grid_boundary2d
+-
+ boundary_conditions:
+   based_on:
+     - .creator.universe
+     - .plot.facet_grid.scatter
+   select:
+-    vals: data/training_data
++    vals: VPINN/training_data
+   transform:
+     - .sel: [!dag_tag vals , {'variable': 'x'}]
+       kwargs:
+@@ -66,35 +59,3 @@ boundary_conditions:
+       0: *darkblue
+       0.5: *yellow
+       1: *red
+-
+-test_functions:
+-  based_on: heatmap
+-  select:
+-    data:
+-      path: data/test_function_values
+-      transform:
+-        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3]}]
+-  row: n_x
+-  col: n_y
+-
+-# Plot the first x-derivatives of the test functions (first three test functions in each direction)
+-d1test_functions_x:
+-  based_on: test_functions
+-  select:
+-    data:
+-      path: data/d1_test_function_values
+-      transform:
+-        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3], idx: 0}]
+-  cbar_kwargs:
+-    label: $\partial_x \nu_{kl}$
+-
+-# Plot the first y-derivatives of the test functions
+-d1test_functions_y:
+-  based_on: test_functions
+-  select:
+-    data:
+-      path: data/d1_test_function_values
+-      transform:
+-        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3], idx: 1}]
+-  cbar_kwargs:
+-    label: $\partial_y \nu_{kl}$
+diff --git a/model/cfgs/Burger1+1D/run.yml b/model/cfgs/Burger1+1D/run.yml
+index 5d3e601..49189f2 100644
+--- a/model/cfgs/Burger1+1D/run.yml
++++ b/model/cfgs/Burger1+1D/run.yml
+@@ -2,23 +2,31 @@
+ paths:
+   model_note: Burger1+1D
+ parameter_space:
+-  num_epochs: 7000
++  num_epochs: 10
++  log_levels:
++    model: debug
+   VPINN:
+-    load_data:
++#    load_data:
++#
++#      # Set to '~' (None) to use the settings below to generate data
++#      data_dir: data/Burger1+1D/data/uni0
++#
++#      # Turn this off to save disk space: the training data is about 50 MB.
++#      # Turning this off will cause some plots to fail.
++#      copy_data: False
++#
++#      # Select a subset of the test functions from the dataset.
++##      test_function_subset:
++##        n_x: !slice [~, 4]
++##        n_y: !slice [~, 4]
+
+-      # Set to '~' (None) to use the settings below to generate data
+-      data_dir: data/Burger1+1D/data/uni0
+-
+-      # Turn this off to save disk space: the training data is about 50 MB.
+-      # Turning this off will cause some plots to fail.
+-      copy_data: True
+     space:
+       x:
+         extent: [-2, 4]
+-        size: 300
++        size: 10
+       y:
+         extent: [0.1, 2]
+-        size: 80
++        size: 10
+     PDE:
+       function: Burger1+1D
+       type: Burger
+@@ -26,10 +34,10 @@ parameter_space:
+       type: Legendre
+       num_functions:
+         n_x:
+-          size: 15
++          size: 3
+         n_y:
+-          size: 8
+-      weight_function: uniform
++          size: 3
++      weight_function: exponential
+     NeuralNet:
+       num_layers: 4
+       nodes_per_layer: 20
+diff --git a/model/cfgs/Burger_compact/eval.yml b/model/cfgs/Burger_compact/eval.yml
+index 3c357cb..dc5180f 100644
+--- a/model/cfgs/Burger_compact/eval.yml
++++ b/model/cfgs/Burger_compact/eval.yml
+@@ -32,12 +32,6 @@ loss:
+     set_scales:
+       y: log
+
+-grid:
+-  based_on: grid2d
+-
+-grid_boundary:
+-  based_on: grid_boundary2d
+-
+ boundary_conditions:
+   based_on:
+     - .creator.universe
+@@ -45,20 +39,25 @@ boundary_conditions:
+   select:
+     vals: data/training_data
+   transform:
+-    - .sel: [!dag_tag vals , {'variable': 'x'}]
++    - .sel: [!dag_tag vals , {variable: 'x'}]
+       kwargs:
+         drop: True
+       tag: x
+-    - .sel: [!dag_tag vals , {'variable': 'u'}]
++    - .sel: [!dag_tag vals, {variable: 'y'}]
++      kwargs:
++        drop: True
++      tag: t
++    - .sel: [!dag_tag vals , {variable: 'u'}]
+       kwargs:
+         drop: True
+       tag: u
+     - xr.Dataset:
+       - x: !dag_tag x
++        t: !dag_tag t
+         u: !dag_tag u
+       tag: data
+   x: x
+-  y: u
++  y: t
+   hue: u
+   cmap:
+     continuous: true
+diff --git a/model/cfgs/Burger_compact/run.yml b/model/cfgs/Burger_compact/run.yml
+index b9059ed..96e694d 100644
+--- a/model/cfgs/Burger_compact/run.yml
++++ b/model/cfgs/Burger_compact/run.yml
+@@ -2,7 +2,7 @@
+ paths:
+   model_note: Burger_compact
+ parameter_space:
+-  num_epochs: 1
++  num_epochs: 5000
+   VPINN:
+ #    load_data:
+ #
+@@ -15,10 +15,10 @@ parameter_space:
+     space:
+       x:
+         extent: [-2, 4]
+-        size: 15
++        size: 50
+       y:
+         extent: [0.1, 2]
+-        size: 15
++        size: 50
+     PDE:
+       function: Burger_compact
+       type: Burger
+@@ -26,9 +26,9 @@ parameter_space:
+       type: Legendre
+       num_functions:
+         n_x:
+-          size: 15
++          size: 4
+         n_y:
+-          size: 8
++          size: 4
+       weight_function: uniform
+     NeuralNet:
+       num_layers: 4
+diff --git a/model/cfgs/Grid_generation_2D/eval.yml b/model/cfgs/Grid_generation_2D/eval.yml
+index 9026253..9f89ae2 100644
+--- a/model/cfgs/Grid_generation_2D/eval.yml
++++ b/model/cfgs/Grid_generation_2D/eval.yml
+@@ -7,5 +7,8 @@ boundary:
+ test_functions/test_functions:
+   based_on: test_functions
+
+-test_functions/d1_test_functions:
+-  based_on: d1_test_functions
+\ No newline at end of file
++test_functions/d1_test_functions_x:
++  based_on: d1test_functions_x
++
++test_functions/d1_test_functions_y:
++  based_on: d1test_functions_y
+\ No newline at end of file
+diff --git a/model/cfgs/Grid_generation_2D/run.yml b/model/cfgs/Grid_generation_2D/run.yml
+index fedf16f..ce9bbf3 100644
+--- a/model/cfgs/Grid_generation_2D/run.yml
++++ b/model/cfgs/Grid_generation_2D/run.yml
+@@ -1,6 +1,6 @@
+ ---
+ paths:
+-  model_note: grid_2d
++  model_note: Burgers_grid
+ parameter_space:
+   generation_run: True
+   log_levels:
+@@ -9,14 +9,14 @@ parameter_space:
+     space:
+       x:
+         extent: [-2, 4]
+-        size: 10
++        size: 300
+       y:
+         extent: [0.1, 2]
+-        size: 10
++        size: 80
+     test_functions:
+       type: Legendre
+       num_functions:
+         n_x:
+-          size: 3
++          size: 15
+         n_y:
+-          size: 3
+\ No newline at end of file
++          size: 15
+\ No newline at end of file
+diff --git a/model/cfgs/Poisson2D/eval.yml b/model/cfgs/Poisson2D/eval.yml
+index 29524f9..70a397f 100644
+--- a/model/cfgs/Poisson2D/eval.yml
++++ b/model/cfgs/Poisson2D/eval.yml
+@@ -36,16 +36,16 @@ loss:
+     set_scales:
+       y: log
+
+-grid:
++grid_plots/grid:
+   based_on: grid2d
+
+-grid_boundary:
++grid_plots/boundary:
+   based_on: grid_boundary2d
+
+ boundary_conditions:
+   based_on: grid_boundary2d
+   select:
+-    vals: data/training_data
++    vals: VPINN/training_data
+   transform:
+     - .isel: [ !dag_prev , { variable: 0 } ]
+       kwargs:
+@@ -72,74 +72,49 @@ boundary_conditions:
+       0.5: *yellow
+       1: *red
+
+-test_functions:
++# Plot the first three test functions in each direction
++test_function_plots/test_functions:
+   based_on: heatmap
+   select:
+     data:
+-      path: data/test_function_values
++      path: grid_test_function_data/test_function_values
+       transform:
+         - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [4]}]
+   row: n_x
+   col: n_y
+
+-# Plot the first x-derivatives of the test functions
+-d1test_functions_x:
+-  based_on: heatmap
++# Plot x-derivatives of the first three test functions
++test_function_plots/d1test_functions_x:
++  based_on: d1test_functions_x
+   select:
+     data:
+-      path: data/d1_test_function_values
+       transform:
++        - .sel: [ !dag_prev , { idx: 0 } ]
++          kwargs:
++            drop: True
+         - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3], idx: 0}]
+-  row: n_x
+-  col: n_y
+-  cbar_kwargs:
+-    label: $\partial_x \nu_{kl}$
+
+-# Plot the first y-derivatives of the test functions
+-d1test_functions_y:
+-  based_on: heatmap
++# Plot the y-derivatives of the first three test functions
++test_function_plots/d1test_functions_y:
++  based_on:
++    - d1test_functions_y
++    - test_function_plots/d1test_functions_x
+   select:
+     data:
+-      path: data/d1_test_function_values
+       transform:
+-        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3], idx: 1}]
+-  row: n_x
+-  col: n_y
+-  cbar_kwargs:
+-    label: $\partial_y \nu_{kl}$
++        - .sel: [ !dag_prev , { idx: 0 } ]
++          kwargs:
++            drop: True
++        - .isel: [ !dag_prev , { n_x: !range [ 3 ], n_y: !range [ 3 ], idx: 0 } ]
+
+-# Plot the norm of the gradient of the test functions
+-d1test_functions_norm:
+-  based_on: heatmap
++# Plot the norm of the first three test function derivatives
++test_function_plots/d1test_functions_norm:
++  based_on: d1test_functions_norm
+   select:
+-    data:
+-      path: data/d1_test_function_values
++    tf_vals:
+       transform:
+-        - .isel: [!dag_prev , {n_x: !range [3], n_y: !range [3]}]
+-        - squared: [ !dag_prev ,  ]
+-        - .sum: [!dag_prev , 'idx']
+-  row: n_x
+-  col: n_y
+-  cmap:
+-    continuous: true
+-    from_values:
+-      0: *red
+-      0.5: *darkblue
+-      1: *yellow
+-  cbar_kwargs:
+-    label: $\Vert \nabla \nu_{kl} \Vert_2$
++        - .isel: [ !dag_prev , { n_x: !range [ 3 ], n_y: !range [ 3 ], idx: 0 } ]
+
++# Plot the values of f integrated against all the test functions
+ f_integrated:
+-  based_on: heatmap
+-  select:
+-    data: data/f_integrated
+-  x: n_x
+-  y: n_y
+-  helpers:
+-    set_tick_locators:
+-      x: &formatting
+-        major:
+-          name: MaxNLocator
+-          integer: true
+-      y:
+-        <<: *formatting
++  based_on: f_integrated_2D
+diff --git a/model/cfgs/Poisson2D/run.yml b/model/cfgs/Poisson2D/run.yml
+index 806b47e..29cce2f 100644
+--- a/model/cfgs/Poisson2D/run.yml
++++ b/model/cfgs/Poisson2D/run.yml
+@@ -2,12 +2,12 @@
+ paths:
+   model_note: Poisson2D
+ parameter_space:
+-  num_epochs: 5000
++  num_epochs: 1
+   VPINN:
+     load_data:
+
+       # Set to '~' (None) to use the settings below to generate data
+-      data_dir: data/Poisson_SinSin2D/data/uni0
++      data_dir: ~ #/Users/thomasgaskin/utopya_output/VPINN/221027-182052_Poisson2D/data/uni0
+
+       # copies to the data to the new output folder. Set to 'false' to conserve disk space.
+       # This will cause any plots requiring that data to no longer function
+diff --git a/model/function_definitions.py b/model/function_definitions.py
+index e5270d7..a0b0a47 100644
+--- a/model/function_definitions.py
++++ b/model/function_definitions.py
+@@ -26,9 +26,13 @@ EXAMPLES = {
+     },
+     "CubedRoot": {"u": lambda x: np.sign(x) * np.abs(x) ** (1.0 / 3), "f": lambda x: 1},
+     "Burger1+1D": {"u": lambda x: 1.0 / (1 + x[0] ** 2), "f": lambda x: 0},
++    "Burger_compact": {
++        "u": lambda x: np.exp(-6 * x[0] ** 2),
++        "f": lambda x: 0,
++    },  # lambda x: max(-x[0]**2 + 1, 0.0)
+     "PorousMedium": {
+         "u": lambda x, t: max(
+-            t ** (-1 / 3) * (1 - 1.0 / 12 * x**2 * t ** (-2 / 3)), 0
++            t ** (-1 / 3) * (1 - 1.0 / 12 * x**2 * t ** (-2 / 3)), 0.0
+         ),
+         "f": lambda x: 0,
+     },
+diff --git a/model/run.py b/model/run.py
+index 71bc8e1..8e9c53c 100755
+--- a/model/run.py
++++ b/model/run.py
+@@ -1,7 +1,6 @@
+ #!/usr/bin/env python3
+ import sys
+ import time
+-from itertools import chain
+ from os.path import dirname as up
+ from typing import Union
+
+@@ -10,6 +9,7 @@ import h5py as h5
+ import numpy as np
+ import ruamel.yaml as yaml
+ import torch
++import utopya_backend
+ import xarray as xr
+ from dantro import logging
+ from dantro._import_tools import import_module_from_path
+@@ -22,7 +22,7 @@ base = import_module_from_path(mod_path=up(up(__file__)), mod_str="include")
+ this = import_module_from_path(mod_path=up(__file__), mod_str="model")
+
+ log = logging.getLogger(__name__)
+-coloredlogs.install(fmt="%(levelname)s %(message)s", level="INFO", logger=log)
++coloredlogs.install(fmt="%(levelname)s %(message)s", level="DEBUG", logger=log)
+
+
+ # ----------------------------------------------------------------------------------------------------------------------
+@@ -81,7 +81,7 @@ class VPINN:
+         def _tf_to_tensor(test_funcs: xr.DataArray) -> Union[None, torch.Tensor]:
+
+             """Unpacks a DataArray of test function values and returns a stacked torch.Tensor. Shape of the
+-            output is given by: [test function multi-index, coordinate-multi-index, 1]"""
++            output is given by: [test function multi-index, coordinate multi-index, 1]"""
+
+             if test_funcs is None:
+                 return None
+@@ -349,7 +349,6 @@ class VPINN:
+ if __name__ == "__main__":
+
+     cfg_file_path = sys.argv[1]
+-
+     log.note("   Preparing model run ...")
+     log.note(f"   Loading config file:\n        {cfg_file_path}")
+     with open(cfg_file_path) as cfg_file:
+@@ -357,6 +356,7 @@ if __name__ == "__main__":
+     model_name = cfg.get("root_model_name", "VPINN")
+     log.note(f"   Model name:  {model_name}")
+     model_cfg = cfg[model_name]
++    logging.getLogger().setLevel(utopya_backend.get_level(cfg["log_levels"]["model"]))
+
+     # Select the training device and number of threads to use
+     device = model_cfg["Training"].get("device", None)
+@@ -385,6 +385,39 @@ if __name__ == "__main__":
+     h5file = h5.File(cfg["output_path"], mode="w")
+     h5group = h5file.create_group(model_name)
+
++    # Get the data: grid, test function data, and training data. This is loaded from a file,
++    # if provided, else synthetically generated
++    data: dict = this.get_grid_tf_data(
++        model_cfg.get("load_data", {}),
++        model_cfg["space"],
++        model_cfg["test_functions"],
++        h5file=h5file,
++    )
++
++    # If a data generation run was performed, return
++    if cfg.get("generation_run", False):
++        log.success("   Grid and test function data generated.")
++        h5file.close()
++        sys.exit(0)
++
++    # Get the training data
++    data.update(
++        this.get_training_data(
++            func=this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
++            grid=data["grid"],
++            boundary=data["grid_boundary"],
++            boundary_isel=model_cfg["Training"].get("boundary", None),
++        )
++    )
++    # Get the external forcing data
++    data.update(
++        this.get_forcing_data(
++            func=this.EXAMPLES[model_cfg["PDE"]["function"]]["f"],
++            grid=data["grid"],
++            test_function_values=data["test_function_values"],
++        )
++    )
++
+     eq_type: str = model_cfg["PDE"]["type"]
+     var_form: int = model_cfg["variational_form"]
+
+@@ -406,20 +439,6 @@ if __name__ == "__main__":
+         **model_cfg["NeuralNet"],
+     )
+
+-    test_func_dict = model_cfg["test_functions"]
+-
+-    # Get the data: grid, test function data, and training data. This is loaded from a file,
+-    # if provided, else synthetically generated
+-    data: dict = this.get_data(
+-        model_cfg.get("load_data", {}),
+-        model_cfg["space"],
+-        test_func_dict,
+-        solution=this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
+-        forcing=this.EXAMPLES[model_cfg["PDE"]["function"]]["f"],
+-        boundary_isel=model_cfg["Training"].get("boundary", None),
+-        h5file=h5file,
+-    )
+-
+     # Initialise the model
+     log.info(f"   Initialising the model '{model_name}' ...")
+     model = VPINN(
+@@ -431,11 +450,12 @@ if __name__ == "__main__":
+         write_every=cfg["write_every"],
+         write_start=cfg["write_start"],
+         weight_function=this.WEIGHT_FUNCTIONS[
+-            test_func_dict["weight_function"].lower()
++            model_cfg["test_functions"]["weight_function"].lower()
+         ],
+         **data,
+     )
+
++    # Train the model
+     num_epochs = cfg["num_epochs"]
+     log.info(f"   Now commencing training for {num_epochs} epochs ...")
+     for _ in range(num_epochs):
+@@ -452,14 +472,16 @@ if __name__ == "__main__":
+
+     log.info("   Simulation run finished. Generating prediction ...")
+
+-    # Get the plot grid, which can be finer than the training grid, if specified
++    # Generate a prediction using the trained network. The prediction is evaluated on a separate grid,
++    # which can be finer than the training grid, if specified. Predictions are generated on the CPU.
++    log.debug("   Generating plot grid ...")
+     plot_grid = base.construct_grid(
+         recursive_update(model_cfg["space"], model_cfg.get("predictions_grid", {}))
+     )
+
+-    # Generate predictions on cpu
+     net = net.to("cpu")
+
++    log.debug("   Evaluating the prediction on the plot grid ...")
+     predictions = xr.apply_ufunc(
+         lambda x: net.forward(torch.tensor(x).float()).detach().numpy(),
+         plot_grid,
+@@ -467,7 +489,8 @@ if __name__ == "__main__":
+         input_core_dims=[["idx"]],
+     )
+
+-    log.debug("   Evaluating the solution on the grid ...")
++    # Evaluate the solution on the grid
++    log.debug("   Evaluating the solution on the plot grid ...")
+     u_exact = xr.apply_ufunc(
+         this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
+         plot_grid,
+@@ -476,6 +499,7 @@ if __name__ == "__main__":
+         keep_attrs=True,
+     )
+
++    # Save training and prediction data
+     dset_u_exact = h5group.create_dataset(
+         "u_exact",
+         list(u_exact.sizes.values()),
+@@ -513,6 +537,75 @@ if __name__ == "__main__":
+         :,
+     ] = predictions
+
++    # External function evaluated on the grid
++    f_evaluated = data["f_evaluated"]
++    dset_f_evaluated = h5group.create_dataset(
++        "f_evaluated",
++        list(f_evaluated.sizes.values()),
++        maxshape=list(f_evaluated.sizes.values()),
++        chunks=True,
++        compression=3,
++    )
++    dset_f_evaluated.attrs["dim_names"] = [str(_) for _ in list(f_evaluated.sizes)]
++
++    # Set the attributes
++    for idx in list(f_evaluated.sizes):
++        dset_f_evaluated.attrs["coords_mode__" + str(idx)] = "values"
++        dset_f_evaluated.attrs["coords__" + str(idx)] = data["grid"].coords[idx].data
++    dset_f_evaluated.attrs.update(f_evaluated.attrs)
++
++    # Write the data
++    dset_f_evaluated[
++        :,
++    ] = f_evaluated
++
++    # Integral of the forcing against the test functions.
++    # This dataset is indexed by the test function indices
++    f_integrated = data["f_integrated"].unstack()
++    dset_f_integrated = h5group.create_dataset(
++        "f_integrated",
++        list(f_integrated.sizes.values()),
++        maxshape=list(f_integrated.sizes.values()),
++        chunks=True,
++        compression=3,
++    )
++    dset_f_integrated.attrs["dim_names"] = [str(_) for _ in list(f_integrated.sizes)]
++
++    # Set attributes
++    for idx in list(f_integrated.sizes):
++        dset_f_integrated.attrs["coords_mode__" + str(idx)] = "values"
++        dset_f_integrated.attrs["coords__" + str(idx)] = f_integrated.coords[idx].data
++    dset_f_integrated.attrs.update(f_integrated.attrs)
++
++    # Write data
++    dset_f_integrated[
++        :,
++    ] = f_integrated
++
++    # Training data: values of the test function on the boundary
++    training_data = data["training_data"]
++    dset_training_data = h5group.create_dataset(
++        "training_data",
++        list(training_data.sizes.values()),
++        maxshape=list(training_data.sizes.values()),
++        chunks=True,
++        compression=3,
++    )
++    dset_training_data.attrs["dim_names"] = [str(_) for _ in list(training_data.sizes)]
++    dset_training_data.attrs.update(training_data.attrs)
++
++    # Set attributes
++    dset_training_data.attrs["coords_mode__idx"] = "trivial"
++    dset_training_data.attrs["coords_mode__variable"] = "values"
++    dset_training_data.attrs["coords__variable"] = [
++        str(_) for _ in training_data.coords["variable"].data
++    ]
++
++    # Write data
++    dset_training_data[
++        :,
++    ] = training_data.to_array()
++
+     log.info("   Done. Wrapping up ...")
+     h5file.close()

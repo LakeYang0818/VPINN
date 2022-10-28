@@ -15,6 +15,24 @@ is implemented using [Pytorch](https://pytorch.org/tutorials/) and is unit teste
 > overview of the Utopia syntax. You can find a complete guide on running models with Utopia/utopya
 > [here](https://docs.utopia-project.org/html/getting_started/tutorial.html#tutorial).
 
+> **_Hint_**: If you encounter any difficulties, please [file an issue](https://github.com/ThGaskin/VPINN/issues/new).
+>
+### Contents of this README
+* [How to install](#how-to-install)
+* [How to run the model](#how-to-run-the-model)
+* [Plotting](#plotting)
+* [Configuration sets](#configuration-sets)
+* [Modifying the configuration](#modifying-the-configuration)
+  * [Grid settings](#grid-settings)
+  * [Function settings](#function-settings)
+* [How to adjust the neural net configuration](#how-to-adjust-the-neural-net-configuration)
+  * [Training settings](#training-settings)
+* [Generating and loading grid and test function data](#generating-and-loading-grid-and-test-function-data)
+* [Parameter sweeps](#parameter-sweeps)
+* [Tests (WIP)](#-tests-wip)
+
+---
+
 ## How to install
 #### 1. Clone this repository
 Clone this repository using a link obtained from 'Code' button:
@@ -60,9 +78,9 @@ utopya models register from-manifest model/VPINN_info.yml
 ```
 Done! 🎉
 
-#### 4. Download data using git LFS (optional)
-The repository contains some pre-processed grid and test function data, which speeds up running models considerably,
-since you do not need to generate the training data. These files are stored using [git LFS](https://git-lfs.github.com)
+#### 4. Download pre-generated grid and test function data using git LFS (optional)
+The repository contains some prepared grid and test function data that can be used to train the model.
+Using it speeds up the runtime considerably. These files are stored using [git LFS](https://git-lfs.github.com)
 (large file storage). To download them, first install git lfs via
 ```console
 git lfs install
@@ -73,7 +91,7 @@ git lfs pull
 ```
 This will pull all the datasets.
 
-## How to run a model
+## How to run the model
 Now you have set up the model, run it by invoking the basic run command
 ```console
 utopya run VPINN
@@ -84,16 +102,16 @@ It will generate a synthetic dataset of test function and grid data, train the n
 `~/utopya_output` by default.
 
 The default configuration settings are provided in the `VPINN_cfg.yml` file in the
-`model` folder. You can modify the settings here, but we recommend changing the configuration
+`model` folder. You can modify the settings there, but we recommend changing the configuration
 settings by instead creating a `run.yml` file somewhere and using that to run the model. You can do so by
 calling
 ```console
 utopya run VPINN path/to/run_cfg.yml
 ```
 In this file, you only need to specify those entries from the `VPINN_cfg.yml` file you wish to change,
-and not reproduce the entire configuration set. The advantage of this approach is that you can
+not copy the entire configuration. The advantage of this approach is that you can
 create multiple configs for different scenarios, and leave the working base configuration untouched.
-An example could look like this:
+An example ``run.yml`` could look like this:
 
 ```yaml
 parameter_space:
@@ -136,32 +154,32 @@ utopya eval VPINN --eval-cfg path/to/eval/cfg
 Even more convenient are so-called *configuration* sets:
 
 ## Configuration sets
-Configuration sets are bundled run and evaluation configuration configurations. Take a look at the `models/cfgs` folder:
+Configuration sets are bundled run and evaluation configurations. Take a look at the `models/cfgs` folder:
 it contains a number of examples. To run and evaluate the model from one of these configuration sets, just call
 ```console
-utopya run VPINN --cfg-set cfg_set_name
+utopya run VPINN --cfg-set <cfg_set_name>
 ```
-replacing `cfg_set_name` with the name of the configuration set. To add a new set, simply create a new
-folder in the `cfgs` folder (or anywhere else, but then taking care to pass an absolute path
+replacing `<cfg_set_name>` with the name of the configuration set. To add a new set, simply create a new
+folder in the `cfgs` folder (or anywhere else, but then take care to pass an absolute path
 rather than just a name). Running the configuration set will produce plots. If you wish to re-evaluate a run (perhaps plotting different figures),
 you do not need to re-run the model, since the data has already been generated. Simply call
 
 ```console
-utopya eval VPINN --cfg-set <name_of_cfg_set>
+utopya eval VPINN --cfg-set <cfg_set_name>
 ```
 
-This will re-evaluate the *last model you ran*. You can re-evaluate any dataset, of course, by
+This will re-evaluate the *last model you ran*. You can re-evaluate any run, of course, by
 providing the path to that dataset, as before:
 
 ```console
-utopya eval VPINN path/to/output/folder --cfg-set <name_of_cfg_set>
+utopya eval VPINN path/to/output/folder --cfg-set <cfg_set_name>
 ```
 ## Modifying the configuration
 To control the simulation, modify the entries in your run configuration. There are
-a number of settings you can adjust. Remember, the run configuration only requires those entries to
+a number of settings you can adjust. Remember, the run configuration only requires those entries you
 wish to change with respect to the default values.
 ### Grid settings
-The domain is controlled from `space` entry:
+The grid is controlled from `space` entry:
 
 ```yaml
 parameter_space:
@@ -183,6 +201,7 @@ you can pass a `predictions_grid` entry:
 VPINN:
   predictions_grid:
     x:
+      extent: [2, 3]
       size: 100
 ```
 The model will recursively update any entries from the `space` configuration and use these
@@ -212,7 +231,7 @@ The test function weighting is controlled from `test_functions/weight_function` 
 weighting can be either `uniform` (all test functions have weight 1), or `exponential`, meaning
 the `kl`-th function has weight `2**{-(k+l)}`.
 
-## How to adjust the neural net configurations
+## How to adjust the neural net configuration
 You can vary the size of the neural net and the activation functions
 right from the config. The size of the input layer is inferred from
 the data passed to it, and the size of the output layer is
@@ -310,10 +329,25 @@ Note that the indexing range of the boundary begins (for two-dimensional grids) 
 grid boundary anti-clockwise. For three dimensional grids, the index begins on the lower left corner of the
 front panel, wraps anti-clockwise around the sides, then selects the upper, and finally the lower panel.
 
-## Loading data
-Once you have generated grid and test function data, you can reuse it to train the neural net repeatedly. This will
+## Generating and loading grid and test function data
+You can generate and reuse grid and test function data to train the neural net repeatedly. This will
 speed up computations enormously, and also allow sweep runs with different neural net configurations.
-To load a dataset, pass the path to the directory containing the `.h5` file to load to the load configuration entry of the config:
+
+To generate grid and test function data, set the ``generation_run`` key to ``True``:
+
+```yaml
+parameter_space:
+  generation_run: True
+```
+See the ``cfgs/Grid_generation_2D`` configuration set for an example. This will generate a dataset and save it to the
+``data/uni0`` folder in the output folder, which you can then use to train a model. The dataset will contain the grid,
+its boundary, and the test functions and their derivatives evaluated on the grid and the grid boundary.
+You can set the number of test functions higher than you actually require, as you can later always select a subset of
+test functions to use for training (see below). The dataset does *not* contain any information on the external forcing or
+boundary conditions, wherefore it can be used for different equations and function examples.
+
+To load a dataset, pass the path to the directory containing the `.h5` file to load to the
+load configuration entry of the config:
 
 ```yaml
 VPINN:
@@ -330,9 +364,23 @@ VPINN:
     data_dir: path/to/folder
     copy_data: True
 ```
+You may also wish to generate a large dataset of many test functions in advance, but then
+train the model on a smaller subset. This can be done by adding the following entry to the
+``load_data`` key:
 
-To turn off data loading, set the ``data_dir`` entry to ``~`` (``None`` in yaml), or delete the
-``load_data`` entry entirely.
+```yaml
+load_data:
+  test_function_subset:
+    n_x: !slice [~, 4]   # Chooses the first four test functions in x direction.
+```
+Use the ``!slice`` tag to make a selection using the standard python ``(start, stop, step)`` syntax, with ``~`` indicating ``None`` in yaml.
+For example, ``!slice [~, ~, 2]`` would select every second test function.
+
+> **_Warning_**:
+> Make sure the names of the test function indices (``n_x`` in this example) match the keys in the dataset.
+
+To turn off data loading, set the ``data_dir`` key to ``~`` (``None`` in yaml), or delete the
+``load_data`` entry entirely. See the ``Burgers1+1D`` or ``Poisson2D`` configuration sets for examples.
 
 ## Parameter sweeps
 > **_Note_**: Take a look at the [full tutorial entry](https://docs.utopia-project.org/html/getting_started/tutorial.html#parameter-sweeps)
@@ -360,7 +408,7 @@ perform_sweep: True
 ```
 You can then run a sweep without the ``--run-mode`` flag in the CLI.
 Passing a `default` argument to the sweep parameter(s) is required: this way, the model can still perform a single run
-when a sweep is not configured. Again, there are plenty of examples in the `cfgs` folders.
+when a sweep is not configured.
 
 ## 🚧 Tests (WIP)
 To run tests, invoke

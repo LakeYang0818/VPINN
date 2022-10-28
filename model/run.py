@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import sys
 import time
-from itertools import chain
 from os.path import dirname as up
 from typing import Union
 
@@ -10,6 +9,7 @@ import h5py as h5
 import numpy as np
 import ruamel.yaml as yaml
 import torch
+import utopya_backend
 import xarray as xr
 from dantro import logging
 from dantro._import_tools import import_module_from_path
@@ -22,7 +22,7 @@ base = import_module_from_path(mod_path=up(up(__file__)), mod_str="include")
 this = import_module_from_path(mod_path=up(__file__), mod_str="model")
 
 log = logging.getLogger(__name__)
-coloredlogs.install(fmt="%(levelname)s %(message)s", level="INFO", logger=log)
+coloredlogs.install(fmt="%(levelname)s %(message)s", level="DEBUG", logger=log)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -81,7 +81,7 @@ class VPINN:
         def _tf_to_tensor(test_funcs: xr.DataArray) -> Union[None, torch.Tensor]:
 
             """Unpacks a DataArray of test function values and returns a stacked torch.Tensor. Shape of the
-            output is given by: [test function multi-index, coordinate-multi-index, 1]"""
+            output is given by: [test function multi-index, coordinate multi-index, 1]"""
 
             if test_funcs is None:
                 return None
@@ -349,7 +349,6 @@ class VPINN:
 if __name__ == "__main__":
 
     cfg_file_path = sys.argv[1]
-
     log.note("   Preparing model run ...")
     log.note(f"   Loading config file:\n        {cfg_file_path}")
     with open(cfg_file_path) as cfg_file:
@@ -357,6 +356,7 @@ if __name__ == "__main__":
     model_name = cfg.get("root_model_name", "VPINN")
     log.note(f"   Model name:  {model_name}")
     model_cfg = cfg[model_name]
+    logging.getLogger().setLevel(utopya_backend.get_level(cfg["log_levels"]["model"]))
 
     # Select the training device and number of threads to use
     device = model_cfg["Training"].get("device", None)
@@ -385,6 +385,39 @@ if __name__ == "__main__":
     h5file = h5.File(cfg["output_path"], mode="w")
     h5group = h5file.create_group(model_name)
 
+    # Get the data: grid, test function data, and training data. This is loaded from a file,
+    # if provided, else synthetically generated
+    data: dict = this.get_grid_tf_data(
+        model_cfg.get("load_data", {}),
+        model_cfg["space"],
+        model_cfg["test_functions"],
+        h5file=h5file,
+    )
+
+    # If a data generation run was performed, return
+    if cfg.get("generation_run", False):
+        log.success("   Grid and test function data generated.")
+        h5file.close()
+        sys.exit(0)
+
+    # Get the training data
+    data.update(
+        this.get_training_data(
+            func=this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
+            grid=data["grid"],
+            boundary=data["grid_boundary"],
+            boundary_isel=model_cfg["Training"].get("boundary", None),
+        )
+    )
+    # Get the external forcing data
+    data.update(
+        this.get_forcing_data(
+            func=this.EXAMPLES[model_cfg["PDE"]["function"]]["f"],
+            grid=data["grid"],
+            test_function_values=data["test_function_values"],
+        )
+    )
+
     eq_type: str = model_cfg["PDE"]["type"]
     var_form: int = model_cfg["variational_form"]
 
@@ -398,26 +431,12 @@ if __name__ == "__main__":
     # Initialise the neural net
     log.info("   Initializing the neural net ...")
     net = base.NeuralNet(
-        input_size=len(model_cfg["space"]),
+        input_size=data["grid"].attrs["grid_dimension"],
         output_size=1,
         eq_type=eq_type,
         var_form=var_form,
         pde_constants=PDE_constants,
         **model_cfg["NeuralNet"],
-    )
-
-    test_func_dict = model_cfg["test_functions"]
-
-    # Get the data: grid, test function data, and training data. This is loaded from a file,
-    # if provided, else synthetically generated
-    data: dict = this.get_data(
-        model_cfg.get("load_data", {}),
-        model_cfg["space"],
-        test_func_dict,
-        solution=this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
-        forcing=this.EXAMPLES[model_cfg["PDE"]["function"]]["f"],
-        boundary_isel=model_cfg["Training"].get("boundary", None),
-        h5file=h5file,
     )
 
     # Initialise the model
@@ -431,11 +450,12 @@ if __name__ == "__main__":
         write_every=cfg["write_every"],
         write_start=cfg["write_start"],
         weight_function=this.WEIGHT_FUNCTIONS[
-            test_func_dict["weight_function"].lower()
+            model_cfg["test_functions"]["weight_function"].lower()
         ],
         **data,
     )
 
+    # Train the model
     num_epochs = cfg["num_epochs"]
     log.info(f"   Now commencing training for {num_epochs} epochs ...")
     for _ in range(num_epochs):
@@ -452,14 +472,18 @@ if __name__ == "__main__":
 
     log.info("   Simulation run finished. Generating prediction ...")
 
-    # Get the plot grid, which can be finer than the training grid, if specified
+    # Generate a prediction using the trained network. The prediction is evaluated on a separate grid,
+    # which can be finer than the training grid, if specified. Predictions are generated on the CPU.
+    log.debug("   Generating plot grid ...")
     plot_grid = base.construct_grid(
-        recursive_update(model_cfg["space"], model_cfg.get("predictions_grid", {}))
+        recursive_update(
+            model_cfg.get("space", {}), model_cfg.get("predictions_grid", {})
+        )
     )
 
-    # Generate predictions on cpu
     net = net.to("cpu")
 
+    log.debug("   Evaluating the prediction on the plot grid ...")
     predictions = xr.apply_ufunc(
         lambda x: net.forward(torch.tensor(x).float()).detach().numpy(),
         plot_grid,
@@ -467,7 +491,8 @@ if __name__ == "__main__":
         input_core_dims=[["idx"]],
     )
 
-    log.debug("   Evaluating the solution on the grid ...")
+    # Evaluate the solution on the grid
+    log.debug("   Evaluating the solution on the plot grid ...")
     u_exact = xr.apply_ufunc(
         this.EXAMPLES[model_cfg["PDE"]["function"]]["u"],
         plot_grid,
@@ -476,6 +501,7 @@ if __name__ == "__main__":
         keep_attrs=True,
     )
 
+    # Save training and prediction data
     dset_u_exact = h5group.create_dataset(
         "u_exact",
         list(u_exact.sizes.values()),
@@ -512,6 +538,75 @@ if __name__ == "__main__":
     dset_predictions[
         :,
     ] = predictions
+
+    # External function evaluated on the grid
+    f_evaluated = data["f_evaluated"]
+    dset_f_evaluated = h5group.create_dataset(
+        "f_evaluated",
+        list(f_evaluated.sizes.values()),
+        maxshape=list(f_evaluated.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_f_evaluated.attrs["dim_names"] = [str(_) for _ in list(f_evaluated.sizes)]
+
+    # Set the attributes
+    for idx in list(f_evaluated.sizes):
+        dset_f_evaluated.attrs["coords_mode__" + str(idx)] = "values"
+        dset_f_evaluated.attrs["coords__" + str(idx)] = data["grid"].coords[idx].data
+    dset_f_evaluated.attrs.update(f_evaluated.attrs)
+
+    # Write the data
+    dset_f_evaluated[
+        :,
+    ] = f_evaluated
+
+    # Integral of the forcing against the test functions.
+    # This dataset is indexed by the test function indices
+    f_integrated = data["f_integrated"].unstack()
+    dset_f_integrated = h5group.create_dataset(
+        "f_integrated",
+        list(f_integrated.sizes.values()),
+        maxshape=list(f_integrated.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_f_integrated.attrs["dim_names"] = [str(_) for _ in list(f_integrated.sizes)]
+
+    # Set attributes
+    for idx in list(f_integrated.sizes):
+        dset_f_integrated.attrs["coords_mode__" + str(idx)] = "values"
+        dset_f_integrated.attrs["coords__" + str(idx)] = f_integrated.coords[idx].data
+    dset_f_integrated.attrs.update(f_integrated.attrs)
+
+    # Write data
+    dset_f_integrated[
+        :,
+    ] = f_integrated
+
+    # Training data: values of the test function on the boundary
+    training_data = data["training_data"]
+    dset_training_data = h5group.create_dataset(
+        "training_data",
+        list(training_data.sizes.values()),
+        maxshape=list(training_data.sizes.values()),
+        chunks=True,
+        compression=3,
+    )
+    dset_training_data.attrs["dim_names"] = [str(_) for _ in list(training_data.sizes)]
+    dset_training_data.attrs.update(training_data.attrs)
+
+    # Set attributes
+    dset_training_data.attrs["coords_mode__idx"] = "trivial"
+    dset_training_data.attrs["coords_mode__variable"] = "values"
+    dset_training_data.attrs["coords__variable"] = [
+        str(_) for _ in training_data.coords["variable"].data
+    ]
+
+    # Write data
+    dset_training_data[
+        :,
+    ] = training_data.to_array()
 
     log.info("   Done. Wrapping up ...")
     h5file.close()

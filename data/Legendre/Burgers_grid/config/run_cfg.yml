@@ -1,0 +1,22 @@
+---
+paths:
+  model_note: Burgers_grid
+parameter_space:
+  generation_run: True
+  log_levels:
+    model: debug
+  VPINN:
+    space:
+      x:
+        extent: [-2, 4]
+        size: 300
+      y:
+        extent: [0.1, 2]
+        size: 80
+    test_functions:
+      type: Legendre
+      num_functions:
+        n_x:
+          size: 15
+        n_y:
+          size: 15

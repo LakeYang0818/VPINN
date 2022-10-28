@@ -2,7 +2,7 @@ import copy
 import logging
 import sys
 from os.path import dirname as up
-from typing import Union
+from typing import Sequence, Union
 
 import h5py as h5
 import paramspace
@@ -18,244 +18,181 @@ sys.path.append(up(up(__file__)))
 base = import_module_from_path(mod_path=up(up(__file__)), mod_str="include")
 
 
-# ----------------------------------------------------------------------------------------------------------------------
-# -- Load or generate grid and training data ---------------------------------------------------------------------------
-# ----------------------------------------------------------------------------------------------------------------------
-
-
-def get_data(
+def load_grid_tf_data(
+    data_dir: str,
     load_cfg: dict,
-    space_dict: dict,
-    test_func_dict: dict,
-    *,
-    solution: callable,
-    forcing: callable,
-    boundary_isel: Union[str, tuple] = None,
-    h5file: h5.File,
 ) -> dict:
 
-    """Returns the grid and test function data, either by loading it from a file or generating it.
-    If generated, data is to written to the output folder
+    """Loads grid and test function data from an h5 file. If a test function subselection is specified,
+    selects a subset of test functions.
 
-    :param load_cfg: load configuration, containing the path to the data file. If the path is None, data is
-         automatically generated. If the ``copy_data`` entry is true, data will be copied and written to the
-         output directory; however, this is false by default to save disk space.
-         The configuration also contains further kwargs, passed to the loader.
-    :param space_dict: the dictionary containing the space configuration
-    :param test_func_dict: the dictionary containing the test function configuration
-    :param solution: the explicit solution (to be evaluated on the grid boundary)
-    :param forcing: the external function
-    :param var_form: the variational form to use
-    :param boundary_isel: (optional) section of the boundary to use for training. Can either be a string ('lower',
-        'upper', 'left', 'right') or a range.
-    :param h5file: the h5file to write data to. A new group is added to this file.
-
-    :return: data: a dictionary containing the grid and test function data
+    :param data_dir: (str) the directory containing the h5 file
+    :param load_cfg: (dict) load settings, passed to :pyfunc:utopya.eval.datamanager.DataManager.load
+    :return: a dictionary containing the grid and test function data
     """
 
-    # TODO: allow selection of which data to load
-    # TODO: allow passing Sequences of boundary sections, e.g. ['lower', 'upper']
-    # TODO: Do not generate separate h5Group?
-    # TODO: re-writing loaded data not possible
+    log.info("   Loading data ...")
 
-    # Collect datasets in a dictionary, passed to the model
     data = {}
 
-    # The directory from which to load data
-    data_dir = load_cfg.pop("data_dir", None)
+    # A subset of test functions can be selected to reduce compute time
+    tf_sel_dict = {
+        key: val for key, val in load_cfg.pop("test_function_subset", {}).items()
+    }
 
-    if data_dir is not None:
+    dm = utopya.eval.datamanager.DataManager(data_dir=data_dir, out_dir=False)
 
-        # --------------------------------------------------------------------------------------------------------------
-        # --- Load data ------------------------------------------------------------------------------------------------
-        # --------------------------------------------------------------------------------------------------------------
+    dm.load(
+        "VPINN_data",
+        loader=load_cfg.pop("loader", "hdf5"),
+        glob_str=load_cfg.pop("glob_str", "*.h5"),
+        print_tree=load_cfg.pop("print_tree", False),
+        **load_cfg,
+    )
 
-        log.info("   Loading data ...")
+    for key in list(dm["VPINN_data"]["data"]["grid_test_function_data"].keys()):
 
-        # If data is loaded, determine whether to copy that data to the new output directory.
-        # This is false by default to save disk storage
-        copy_data = load_cfg.pop("copy_data", False)
+        # Get the dataset and convert to xr.DataArray
+        ds = dm["VPINN_data"]["data"]["grid_test_function_data"][key]
+        data[key] = ds.data
 
-        dm = utopya.eval.datamanager.DataManager(data_dir=data_dir, out_dir=False)
-
-        dm.load(
-            "VPINN_data",
-            loader=load_cfg.pop("loader", "hdf5"),
-            glob_str=load_cfg.pop("glob_str", "*.h5"),
-            print_tree=load_cfg.pop("print_tree", False),
-            **load_cfg,
-        )
-
-        for key in list(dm["VPINN_data"]["data"]["data"].keys()):
-
-            # Get the dataset and convert to xr.DataArray
-            ds = dm["VPINN_data"]["data"]["data"][key]
-            data[key] = ds.data
-
-            # These entries should be xr.Datasets
-            if key in [
-                "training_data",
-                "grid_boundary",
-                "d1_test_function_values_boundary",
-            ]:
-                data[key] = ds.data.to_dataset()
-
-            # Manually copy attributes
-            for attr in [
-                ("grid_density", lambda x: float(x)),
-                ("grid_dimension", lambda x: int(x)),
-                ("space_dimensions", lambda x: [str(_) for _ in x]),
-                ("test_function_dims", lambda x: [str(_) for _ in x]),
-            ]:
-                if attr[0] in ds.attrs.keys():
-
-                    data[key].attrs[attr[0]] = attr[1](ds.attrs[attr[0]])
-
-        # Rename data
-        data["training_data"] = data["training_data"].rename(
-            {"training_data": "boundary_data"}
-        )
-
-        # Stack the test function indices into a single multi-index
-        for key in [
-            "test_function_values",
-            "d1_test_function_values",
-            "d2_test_function_values",
+        # These entries are xr.Datasets, rather than xr.DataArrays
+        if key in [
+            "grid_boundary",
             "d1_test_function_values_boundary",
-            "f_integrated",
         ]:
-            data[key] = (
-                data[key]
-                .stack(tf_idx=data[key].attrs["test_function_dims"])
-                .transpose("tf_idx", ...)
-            )
+            data[key] = ds.data.to_dataset()
 
-        log.info("   All data loaded")
+        # Manually copy attributes
+        for attr in [
+            ("grid_density", lambda x: float(x)),
+            ("grid_dimension", lambda x: int(x)),
+            ("space_dimensions", lambda x: [str(_) for _ in x]),
+            ("test_function_dims", lambda x: [str(_) for _ in x]),
+        ]:
+            if attr[0] in ds.attrs.keys():
+                data[key].attrs[attr[0]] = attr[1](ds.attrs[attr[0]])
 
-        if not copy_data:
-            return data
-    else:
-
-        # --------------------------------------------------------------------------------------------------------------
-        # --- Generate data --------------------------------------------------------------------------------------------
-        # --------------------------------------------------------------------------------------------------------------
-
-        if len(space_dict) != len(test_func_dict["num_functions"]):
-            raise ValueError(
-                f"Space and test function dimensions do not match! "
-                f"Got {len(space_dict)} and {len(test_func_dict['num_functions'])}."
-            )
-
-        log.info("   Generating data ...")
-
-        log.debug("   Constructing the grid ... ")
-        grid: xr.DataArray = base.construct_grid(space_dict)
-        boundary: xr.Dataset = base.get_boundary(grid)
-        data["grid"] = grid
-        data["grid_boundary"] = boundary
-        training_boundary = (
-            boundary
-            if boundary_isel is None
-            else base.get_boundary_isel(boundary, boundary_isel, grid)
-        )
-        log.note("   Constructed the grid.")
-
-        # The test functions are only defined on [-1, 1], so a separate grid is used to generate
-        # test function values
-        tf_space_dict = paramspace.tools.recursive_replace(
-            copy.deepcopy(space_dict),
-            select_func=lambda d: "extent" in d,
-            replace_func=lambda d: d.update(dict(extent=[-1, 1])) or d,
+    # Stack the test function indices into a single multi-index
+    for key in [
+        "test_function_values",
+        "d1_test_function_values",
+        "d2_test_function_values",
+        "d1_test_function_values_boundary",
+    ]:
+        data[key] = (
+            data[key]
+            .sel(tf_sel_dict)
+            .stack(tf_idx=data[key].attrs["test_function_dims"])
+            .transpose("tf_idx", ...)
         )
 
-        tf_grid: xr.DataArray = base.construct_grid(tf_space_dict)
-        tf_boundary: xr.Dataset = base.get_boundary(tf_grid)
+    data["grid_boundary"] = data["grid_boundary"].rename(
+        {"grid_boundary": "boundary_data"}
+    )
 
-        log.debug("   Evaluating test functions on grid ...")
-        test_function_indices = base.construct_grid(
-            test_func_dict["num_functions"], lower=1, dtype=int
-        )
-        test_function_values = base.tf_grid_evaluation(
-            tf_grid, test_function_indices, type=test_func_dict["type"], d=0
-        )
+    log.info("   Data loaded.")
 
-        log.note("   Evaluated the test functions.")
-        data["test_function_values"] = test_function_values.stack(
-            tf_idx=test_function_values.attrs["test_function_dims"]
-        ).transpose("tf_idx", ...)
+    return data
 
-        log.debug("   Evaluating test function derivatives on grid ... ")
-        d1_test_function_values = base.tf_grid_evaluation(
-            tf_grid, test_function_indices, type=test_func_dict["type"], d=1
-        )
 
-        data["d1_test_function_values"] = d1_test_function_values.stack(
-            tf_idx=test_function_values.attrs["test_function_dims"]
-        ).transpose("tf_idx", ...)
+def generate_grid_tf_data(
+    space_dict: dict,
+    test_func_dict: dict,
+) -> dict:
 
-        d1_test_function_values_boundary = base.tf_simple_evaluation(
-            tf_boundary.sel(variable=tf_grid.attrs["space_dimensions"]),
-            test_function_indices,
-            type=test_func_dict["type"],
-            d=1,
-            core_dim="variable",
-        )
-        data[
-            "d1_test_function_values_boundary"
-        ] = d1_test_function_values_boundary.stack(
-            tf_idx=test_function_values.attrs["test_function_dims"]
-        ).transpose(
-            "tf_idx", ...
+    """Generates grid and test function data.
+
+    :param space_dict: the configuration for the space grid
+    :param test_func_dict: the configuration for the test function grid
+    :return: a dictionary containing the grid and test function data
+    """
+    data = {}
+
+    if len(space_dict) != len(test_func_dict["num_functions"]):
+        raise ValueError(
+            f"Space and test function dimensions do not match! "
+            f"Got {len(space_dict)} and {len(test_func_dict['num_functions'])}."
         )
 
-        log.debug("   Evaluating test function second derivatives on grid ... ")
-        d2_test_function_values = base.tf_grid_evaluation(
-            tf_grid, test_function_indices, type=test_func_dict["type"], d=2
-        )
-        data["d2_test_function_values"] = d2_test_function_values.stack(
-            tf_idx=test_function_values.attrs["test_function_dims"]
-        ).transpose("tf_idx", ...)
+    log.info("   Generating grid and test function data ...")
 
-        log.debug("   Evaluating the external function on the grid ...")
-        f_evaluated: xr.DataArray = xr.apply_ufunc(
-            forcing, grid, input_core_dims=[["idx"]], vectorize=True
-        )
-        data["f_evaluated"] = f_evaluated
+    log.debug("   Constructing the grid ... ")
+    grid: xr.DataArray = base.construct_grid(space_dict)
+    boundary: xr.Dataset = base.get_boundary(grid)
+    data["grid"] = grid
+    data["grid_boundary"] = boundary
 
-        log.debug("   Integrating the function over the grid ...")
-        f_integrated = base.integrate_xr(f_evaluated, test_function_values)
-        data["f_integrated"] = f_integrated.stack(
-            tf_idx=f_integrated.attrs["test_function_dims"]
-        ).transpose("tf_idx", ...)
+    # The test functions are only defined on [-1, 1], so a separate grid is used to generate
+    # test function values
+    log.debug("   Constructing the test function grid ...")
+    tf_space_dict = paramspace.tools.recursive_replace(
+        copy.deepcopy(space_dict),
+        select_func=lambda d: "extent" in d,
+        replace_func=lambda d: d.update(dict(extent=[-1, 1])) or d,
+    )
 
-        log.debug("   Evaluating the solution on the boundary ...")
-        training_data: xr.Dataset = xr.concat(
-            [
-                training_boundary,
-                xr.apply_ufunc(
-                    solution,
-                    training_boundary.sel(variable=grid.attrs["space_dimensions"]),
-                    input_core_dims=[["variable"]],
-                    vectorize=True,
-                ).assign_coords(variable=("variable", ["u"])),
-            ],
-            dim="variable",
-        )
-        data["training_data"] = training_data
+    tf_grid: xr.DataArray = base.construct_grid(tf_space_dict)
+    tf_boundary: xr.Dataset = base.get_boundary(tf_grid)
 
-        log.info("   Generated data.")
-    # ------------------------------------------------------------------------------------------------------------------
-    # --- Set up chunked dataset to store the state data in ------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
+    # Evaluate the test functions on the grid, using fast grid evaluation
+    log.debug("   Evaluating test functions on grid ...")
+    test_function_indices = base.construct_grid(
+        test_func_dict["num_functions"], lower=1, dtype=int
+    )
+    test_function_values = base.tf_grid_evaluation(
+        tf_grid, test_function_indices, type=test_func_dict["type"], d=0
+    )
+    data["test_function_values"] = test_function_values.stack(
+        tf_idx=test_function_values.attrs["test_function_dims"]
+    ).transpose("tf_idx", ...)
+
+    log.debug("   Evaluating test function derivatives on grid ... ")
+    d1_test_function_values = base.tf_grid_evaluation(
+        tf_grid, test_function_indices, type=test_func_dict["type"], d=1
+    )
+
+    data["d1_test_function_values"] = d1_test_function_values.stack(
+        tf_idx=test_function_values.attrs["test_function_dims"]
+    ).transpose("tf_idx", ...)
+
+    log.debug("   Evaluating test function second derivatives on grid ... ")
+    d2_test_function_values = base.tf_grid_evaluation(
+        tf_grid, test_function_indices, type=test_func_dict["type"], d=2
+    )
+    data["d2_test_function_values"] = d2_test_function_values.stack(
+        tf_idx=test_function_values.attrs["test_function_dims"]
+    ).transpose("tf_idx", ...)
+
+    # Evaluate the test function derivatives on the grid boundary
+    d1_test_function_values_boundary = base.tf_simple_evaluation(
+        tf_boundary.sel(variable=tf_grid.attrs["space_dimensions"]),
+        test_function_indices,
+        type=test_func_dict["type"],
+        d=1,
+        core_dim="variable",
+    )
+    data["d1_test_function_values_boundary"] = d1_test_function_values_boundary.stack(
+        tf_idx=test_function_values.attrs["test_function_dims"]
+    ).transpose("tf_idx", ...)
+
+    log.info("   Generated grid and test function data.")
+
+    return data
+
+
+def save_grid_tf_data(data: dict, h5file: h5.File):
+
+    """Saves the grid and test function data to a h5 file
+
+    :param data: the dictionary containing the data
+    :param h5file: the h5.File to save the data to
+    """
 
     log.info("   Saving data ... ")
-    data_group = h5file.create_group("data")
+    data_group = h5file.create_group("grid_test_function_data")
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # --- Grid and grid boundary ---------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-
-    # Grid
+    # Initialise grid dataset
     grid = data["grid"]
     dset_grid = data_group.create_dataset(
         "grid",
@@ -300,11 +237,7 @@ def get_data(
         :,
     ] = data["grid_boundary"].to_array()
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # --- Test function values -----------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-
-    # Test function values
+    # Initialise test function values datasets
     test_function_values = data["test_function_values"].unstack()
     dset_test_function_values = data_group.create_dataset(
         "test_function_values",
@@ -408,83 +341,123 @@ def get_data(
         :,
     ] = d1_test_function_values_boundary
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # --- External forcing ---------------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-
-    # External function evaluated on the grid
-    f_evaluated = data["f_evaluated"]
-    dset_f_evaluated = data_group.create_dataset(
-        "f_evaluated",
-        list(f_evaluated.sizes.values()),
-        maxshape=list(f_evaluated.sizes.values()),
-        chunks=True,
-        compression=3,
-    )
-    dset_f_evaluated.attrs["dim_names"] = [str(_) for _ in list(f_evaluated.sizes)]
-
-    # Set the attributes
-    for idx in list(f_evaluated.sizes):
-        dset_f_evaluated.attrs["coords_mode__" + str(idx)] = "values"
-        dset_f_evaluated.attrs["coords__" + str(idx)] = grid.coords[idx].data
-    dset_f_evaluated.attrs.update(f_evaluated.attrs)
-
-    # Write the data
-    dset_f_evaluated[
-        :,
-    ] = f_evaluated
-
-    # Integral of the forcing against the test functions.
-    # This dataset is indexed by the test function indices
-    f_integrated = data["f_integrated"].unstack()
-    dset_f_integrated = data_group.create_dataset(
-        "f_integrated",
-        list(f_integrated.sizes.values()),
-        maxshape=list(f_integrated.sizes.values()),
-        chunks=True,
-        compression=3,
-    )
-    dset_f_integrated.attrs["dim_names"] = [str(_) for _ in list(f_integrated.sizes)]
-
-    # Set attributes
-    for idx in list(f_integrated.sizes):
-        dset_f_integrated.attrs["coords_mode__" + str(idx)] = "values"
-        dset_f_integrated.attrs["coords__" + str(idx)] = f_integrated.coords[idx].data
-    dset_f_integrated.attrs.update(f_integrated.attrs)
-
-    # Write data
-    dset_f_integrated[
-        :,
-    ] = f_integrated
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # --- Boundary training data ---------------------------------------------------------------------------------------
-    # ------------------------------------------------------------------------------------------------------------------
-
-    # Training data: values of the test function on the boundary
-    training_data = data["training_data"]
-    dset_training_data = data_group.create_dataset(
-        "training_data",
-        list(training_data.sizes.values()),
-        maxshape=list(training_data.sizes.values()),
-        chunks=True,
-        compression=3,
-    )
-    dset_training_data.attrs["dim_names"] = [str(_) for _ in list(training_data.sizes)]
-    dset_training_data.attrs.update(training_data.attrs)
-
-    # Set attributes
-    dset_training_data.attrs["coords_mode__idx"] = "trivial"
-    dset_training_data.attrs["coords_mode__variable"] = "values"
-    dset_training_data.attrs["coords__variable"] = [
-        str(_) for _ in training_data.coords["variable"].data
-    ]
-
-    # Write data
-    dset_training_data[
-        :,
-    ] = training_data.to_array()
-
     log.info("   All data saved.")
 
+
+def get_grid_tf_data(
+    load_cfg: dict,
+    space_dict: dict,
+    test_func_dict: dict,
+    h5file: h5.File,
+) -> dict:
+
+    """Returns the grid and test function data, either by loading it from a file or generating it.
+    If generated, data is written to the output folder
+
+    :param load_cfg: load configuration, containing the path to the data file. If the path is None, data is
+         automatically generated. If the ``copy_data`` entry is true, data will be copied and written to the
+         output directory; however, this is false by default to save disk space.
+         The configuration also contains further kwargs, passed to the loader.
+    :param space_dict: the dictionary containing the space configuration
+    :param test_func_dict: the dictionary containing the test function configuration
+    :param h5file: the h5file to write data to. A new group is added to this file.
+
+    :return: data: a dictionary containing the grid and test function data
+    """
+
+    # The directory from which to load data
+    data_dir = load_cfg.pop("data_dir", None)
+
+    # Load data
+    if data_dir is not None:
+
+        # If data is loaded, determine whether to copy that data to the new output directory.
+        # This is false by default to save disk storage
+        copy_data = load_cfg.pop("copy_data", False)
+
+        data = load_grid_tf_data(data_dir, load_cfg)
+
+        # If data is not copied to the new output folder, return data
+        if not copy_data:
+            return data
+
+    # Generate data
+    else:
+
+        data = generate_grid_tf_data(space_dict, test_func_dict)
+
+    # Save the data and return
+    save_grid_tf_data(data, h5file)
+
     return data
+
+
+def get_training_data(
+    *,
+    func: callable,
+    grid: xr.DataArray,
+    boundary: xr.Dataset,
+    boundary_isel: Union[Sequence[Union[str, slice]], str, slice, None],
+) -> dict:
+
+    """Obtains the training data, given by the boundary conditions on a specified grid boundary.
+
+    :param func: the function to evaluate on the boundary
+    :param grid: the grid data
+    :param boundary: the grid boundary
+    :param boundary_isel: the boundary selection, i.e. which part of the boundary to use as training data
+    :return: a dictionary containing the training data
+    """
+
+    # Get the training boundary
+    log.debug("   Obtaining the training boundary ...")
+    training_boundary = (
+        boundary
+        if boundary_isel is None
+        else base.get_boundary_isel(boundary, boundary_isel, grid)
+    )
+
+    # Evaluate the function on the training boundary
+    log.debug("   Evaluating the solution on the boundary ...")
+    training_data: xr.Dataset = xr.concat(
+        [
+            training_boundary,
+            xr.apply_ufunc(
+                func,
+                training_boundary.sel(variable=grid.attrs["space_dimensions"]),
+                input_core_dims=[["variable"]],
+                vectorize=True,
+            ).assign_coords(variable=("variable", ["u"])),
+        ],
+        dim="variable",
+    )
+
+    return dict(training_data=training_data)
+
+
+def get_forcing_data(
+    *,
+    func: callable,
+    grid: xr.DataArray,
+    test_function_values: xr.DataArray,
+) -> dict:
+
+    """Integrates a function against an xr.DataArray of test functions.
+
+    :param func: the function to integrate
+    :param grid: the grid
+    :param test_function_values: the test function values
+    :return: a dictionary containing the function integrated
+    """
+
+    log.debug("   Evaluating the external function on the grid ...")
+    f_evaluated: xr.DataArray = xr.apply_ufunc(
+        func, grid, input_core_dims=[["idx"]], vectorize=True
+    )
+
+    log.debug("   Integrating the function over the grid ...")
+    f_integrated: xr.DataArray = base.integrate_xr(
+        f_evaluated, test_function_values
+    ).transpose("tf_idx", ...)
+
+    return dict(f_evaluated=f_evaluated, f_integrated=f_integrated)

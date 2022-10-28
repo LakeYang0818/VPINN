@@ -1,28 +1,28 @@
 ---
 paths:
-  model_note: Burger1+1D
+  model_note: Burger_compact
 parameter_space:
-  num_epochs: 7000
+  num_epochs: 5000
   VPINN:
     load_data:
 
       # Set to '~' (None) to use the settings below to generate data
-      data_dir: data/Burger1+1D/data/uni0
+      data_dir: data/Legendre/Burgers_grid/data/uni0
 
-      # Turn this on to copy the grid and test function data to the new directory
+      # Turn this on to copy test function and grid data to output directory (about 100MB!)
       copy_data: False
 
-      # Select a subset of the test functions from the dataset (optional)
+      # Select a subset of the test functions from the dataset (which contains 20x20 test functions) (optional)
       test_function_subset:
-        n_x: !slice [~, 10]
-        n_y: !slice [~, 8]
+        n_x: !slice [~, 5]
+        n_y: !slice [~, 5]
 
     PDE:
-      function: Burger1+1D
+      function: Burger_compact
       type: Burger
     test_functions:
       type: Legendre
-      weight_function: exponential
+      weight_function: uniform
     NeuralNet:
       num_layers: 4
       nodes_per_layer: 20
@@ -34,7 +34,10 @@ parameter_space:
         4: linear
     variational_form: 1
     Training:
-      boundary: lower
+      boundary:
+        - left
+        - lower
+        - right
     predictions_grid:
       x:
         extent: [-2, 4]
