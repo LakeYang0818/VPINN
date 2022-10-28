@@ -1,0 +1,22 @@
+---
+paths:
+  model_note: Poisson_grid
+parameter_space:
+  generation_run: True
+  log_levels:
+    model: debug
+  VPINN:
+    space:
+      x:
+        extent: [-1, 1]
+        size: 100
+      y:
+        extent: [-1, 1]
+        size: 100
+    test_functions:
+      type: Legendre
+      num_functions:
+        n_x:
+          size: 20
+        n_y:
+          size: 20

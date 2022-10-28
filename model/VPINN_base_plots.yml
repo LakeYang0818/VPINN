@@ -24,7 +24,7 @@
     xtick.labelsize:    *fontsize
     ytick.labelsize:    *fontsize
     grid.linewidth:     0.5
-    savefig.bbox:       tight
+   # savefig.bbox:       tight
     axes.prop_cycle: !format
       fstr: "cycler('color', ['{colors[yellow]:}',
                               '{colors[darkblue]:}',
@@ -67,6 +67,23 @@
   select_and_combine:
     base_path: *base_path
 
+line:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
+
+# Plot a function on a two-dimensional domain
+heatmap:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.pcolormesh
+  cmap: &cmap
+    continuous: true
+    from_values:
+      0: *darkblue
+      0.5: *red
+      1: *yellow
+
 # ======================================================================================================================
 #  ╔═╗╦  ╔═╗╔╦╗╔═╗
 #  ╠═╝║  ║ ║ ║ ╚═╗
@@ -89,6 +106,21 @@ loss:
     set_scales:
       y: log
 
+f_integrated_2D:
+  based_on: heatmap
+  select:
+    data: VPINN/f_integrated
+  x: n_x
+  y: n_y
+  helpers:
+    set_tick_locators:
+      x: &formatting
+        major:
+          name: MaxNLocator
+          integer: true
+      y:
+        <<: *formatting
+
 # ======================================================================================================================
 #  ╔═╗╦═╗╦╔╦╗  ╔═╗╦  ╔═╗╔╦╗╔═╗
 #  ║ ╦╠╦╝║ ║║  ╠═╝║  ║ ║ ║ ╚═╗
@@ -101,7 +133,7 @@ grid1d:
     - .creator.universe
     - .plot.facet_grid.scatter
   select:
-    grid: data/grid
+    grid: grid_test_function_data/grid
   transform:
     - .isel: [!dag_tag grid, {idx: 0} ]
       kwargs:
@@ -121,7 +153,7 @@ grid_boundary1d:
     - .creator.universe
     - .plot.facet_grid.scatter
   select:
-    vals: data/grid_boundary
+    vals: grid_test_function_data/grid_boundary
   transform:
     - .isel: [ !dag_prev , { variable: 0 } ]
       kwargs:
@@ -153,7 +185,7 @@ grid2d:
     - .creator.universe
     - .plot.facet_grid.scatter
   select:
-    grid: data/grid
+    grid: grid_test_function_data/grid
   transform:
     - .isel: [!dag_tag grid , {idx: 0}]
       kwargs:
@@ -176,7 +208,7 @@ grid_boundary2d:
     - .creator.universe
     - .plot.facet_grid.scatter
   select:
-    vals: data/grid_boundary
+    vals: grid_test_function_data/grid_boundary
   transform:
     - .isel: [ !dag_prev , { variable: 0 } ]
       kwargs:
@@ -200,7 +232,7 @@ grid3d:
     - .creator.universe
     - .plot.facet_grid.scatter3d
   select:
-    grid: data/grid
+    grid: grid_test_function_data/grid
   transform:
     - .isel: [!dag_prev , {idx: 0}]
       kwargs:
@@ -235,7 +267,7 @@ grid_boundary3d:
     - .creator.universe
     - .plot.facet_grid.scatter3d
   select:
-    vals: data/grid_boundary
+    vals: grid_test_function_data/grid_boundary
   transform:
     - .isel: [ !dag_prev , { variable: 0 } ]
       kwargs:
@@ -264,22 +296,90 @@ grid_boundary3d:
 #  ╠═╝╠╦╝║╣  ║║║║   ║ ║║ ║║║║╚═╗
 #  ╩  ╩╚═╚═╝═╩╝╩╚═╝ ╩ ╩╚═╝╝╚╝╚═╝
 # ======================================================================================================================
-line:
-  based_on:
-    - .creator.universe
-    - .plot.facet_grid.line
 
-# Plot a function on a two-dimensional domain
-heatmap:
-  based_on:
-    - .creator.universe
-    - .plot.facet_grid.pcolormesh
-  cmap: &cmap
+# Plots the true and predicted solution
+predictions_1D:
+  based_on: line
+  select:
+    prediction:
+      path: VPINN/predictions
+      transform:
+        - .data: [!dag_prev ]
+    solution:
+      path: VPINN/u_exact
+      transform:
+        - .data: [!dag_prev ]
+  transform:
+    - operation: pd.Index
+      args: [ [ 'prediction', 'exact solution' ] ]
+      kwargs:
+        name: 'kind'
+    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
+      tag: data
+  hue: kind
+
+# Plots a 2-dimensional prediction
+predictions_2D:
+  based_on: heatmap
+  select:
+    data: VPINN/predictions
+
+# Plots the test functions
+test_functions:
+  based_on: heatmap
+  select:
+    data:
+      path: grid_test_function_data/test_function_values
+  row: n_x
+  col: n_y
+
+# Plot the x-derivatives of the test functions
+d1test_functions_x:
+  based_on: test_functions
+  select:
+    data:
+      path: grid_test_function_data/d1_test_function_values
+      transform:
+        - .sel: [!dag_prev , {idx: 0}]
+          kwargs:
+            drop: True
+  cbar_kwargs:
+    label: $\partial_x \nu_{kl}$
+
+# Plot the y-derivatives of the test functions
+d1test_functions_y:
+  based_on: test_functions
+  select:
+    data:
+      path: grid_test_function_data/d1_test_function_values
+      transform:
+        - .sel: [ !dag_prev , {idx: 1} ]
+          kwargs:
+            drop: True
+  cbar_kwargs:
+    label: $\partial_y \nu_{kl}$
+
+# Plot the norm of the gradient of the test functions
+d1test_functions_norm:
+  based_on: heatmap
+  select:
+    tf_data:
+      path: grid_test_function_data/d1_test_function_values
+  transform:
+    - squared: [!dag_tag tf_data  ]
+    - .sum: [!dag_prev , 'idx']
+      tag: data
+  row: n_x
+  col: n_y
+  cmap:
     continuous: true
     from_values:
-      0: *darkblue
-      0.5: *red
+      0: *red
+      0.5: *darkblue
       1: *yellow
+  cbar_kwargs:
+    label: $\Vert \nabla \nu_{kl} \Vert_2$
+
 
 #u_boundary:
 #  based_on:

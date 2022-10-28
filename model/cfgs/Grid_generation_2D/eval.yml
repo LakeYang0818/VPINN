@@ -1,0 +1,35 @@
+grid:
+  based_on: grid2d
+  s: 0.3
+  c: black
+
+boundary:
+  based_on: grid_boundary2d
+  s: 0.3
+  c: black
+
+
+test_functions/test_functions:
+  based_on: test_functions
+  select:
+    data:
+      transform:
+        - .isel: [ !dag_prev , { n_x: !range [ 3 ], n_y: !range [ 3 ]} ]
+
+test_functions/d1_test_functions_x:
+  based_on: d1test_functions_x
+  select:
+    data:
+      transform:
+        - .isel: [ !dag_prev , { n_x: !range [ 3 ], n_y: !range [ 3 ], idx: 0 } ]
+          kwargs:
+            drop: true
+
+test_functions/d1_test_functions_y:
+  based_on: d1test_functions_y
+  select:
+    data:
+      transform:
+        - .isel: [ !dag_prev , { n_x: !range [ 3 ], n_y: !range [ 3 ], idx: 1 } ]
+          kwargs:
+            drop: true

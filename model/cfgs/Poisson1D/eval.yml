@@ -10,6 +10,14 @@
   lightgreen:     &lightgreen       '#AFD8BC'
   grey:           &grey             '#3D4244'
 
+# Training loss
+loss:
+  based_on: loss
+  helpers:
+    set_scales:
+      y: log
+
+# Plot the predictions and exact solution
 predictions:
   based_on: line
   select:
@@ -30,23 +38,17 @@ predictions:
       tag: data
   hue: kind
 
-loss:
-  based_on: loss
-  helpers:
-    set_scales:
-      y: log
-
-grid:
+grid_plots/grid:
   based_on: grid1d
   c: *grey
 
-grid_boundary:
+grid_plots/boundary:
   based_on: grid_boundary1d
 
 boundary_conditions:
   based_on: grid_boundary2d
   select:
-    vals: data/training_data
+    vals: VPINN/training_data
   transform:
     - .isel: [ !dag_prev , { variable: 0 } ]
       kwargs:
@@ -66,14 +68,20 @@ boundary_conditions:
         u: !dag_tag u
       tag: data
   hue: u
+  cmap:
+    continuous: true
+    from_values:
+      0: *darkblue
+      0.5: *yellow
+      1: *red
 
-test_functions:
+test_function_plots/test_functions:
   based_on:
     - .creator.universe
     - .plot.facet_grid.line
   select:
     data:
-      path: data/test_function_values
+      path: grid_test_function_data/test_function_values
       transform:
         - .isel: [!dag_prev , {n_x: !range [5]}]
   hue: n_x
@@ -81,16 +89,17 @@ test_functions:
     set_legend:
       use_legend: False
 
-d1_test_functions:
+test_function_plots/d1_test_functions:
   based_on: test_functions
   select:
     data:
-      path: data/d1_test_function_values
+      path: grid_test_function_data/d1_test_function_values
 
+# The values of the forcing integrated against the test functions
 f_integrated:
   based_on: line
   select:
-    data: data/f_integrated
+    data: VPINN/f_integrated
   x: n_x
   helpers:
     set_tick_locators:
@@ -103,4 +112,4 @@ f_integrated:
 forcing:
   based_on: line
   select:
-    data: data/f_evaluated
+    data: VPINN/f_evaluated

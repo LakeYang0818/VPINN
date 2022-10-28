@@ -7,20 +7,15 @@ parameter_space:
     load_data:
 
       # Set to '~' (None) to use the settings below to generate data
-      data_dir: data/Poisson_SinSin2D/data/uni0
+      data_dir: data/Legendre/grid_2D/data/uni0
 
-      # copies to the data to the new output folder. Set to 'false' to conserve disk space.
-      # This will cause any plots requiring that data to no longer function
-      copy_data: true
+      # Set to 'true' to copy the grid and test function data to the new output folder.
+      copy_data: false
 
-    # Settings for the grid space
-    space:
-      x:
-        extent: [ -1, 1]
-        size: 10
-      y:
-        extent: [-1, 1]
-        size: 30
+      # The dataset contains 20 test functions in each direction; we will only use 10 in each
+      test_function_subset:
+        n_x: !slice [~, 10]
+        n_y: !slice [~, 10]
 
     # PDE settings
     PDE:
@@ -29,12 +24,6 @@ parameter_space:
 
     # Test function settings
     test_functions:
-      type: Legendre
-      num_functions:
-        n_x:
-          size: 10
-        n_y:
-          size: 10
       weight_function: uniform
     variational_form: 1
 
@@ -52,6 +41,8 @@ parameter_space:
     # Settings for the prediction resolution: updates the 'space' dictionary
     predictions_grid:
       x:
+        extent: [-1, 1]
         size: 100
       y:
+        extent: [-1, 1]
         size: 100

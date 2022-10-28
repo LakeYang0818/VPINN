@@ -10,22 +10,11 @@
   lightgreen:     &lightgreen       '#AFD8BC'
   grey:           &grey             '#3D4244'
 
-# Plot the prediction
+# Plot the predictions
 predictions:
-  based_on: predictions_2D
-
-# Plot snapshots of the prediction
-frames:
-  based_on:
-    - .creator.universe
-    - .plot.facet_grid.line
-    - .plot.facet_grid.with_auto_encoding
+  based_on: heatmap
   select:
-    data:
-      path: VPINN/predictions
-      transform:
-        - .isel: [!dag_prev , {y: !slice [~, ~, 33]}]
-  col: y
+    data: VPINN/predictions
 
 # Plot an animation of the solution
 animation:
@@ -42,14 +31,26 @@ animation:
     set_title:
       title: ' '
 
-# Plot the training loss
+# Plot snapshots of the solution over time
+frames:
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
+    - .plot.facet_grid.with_auto_encoding
+  select:
+    data:
+      path: VPINN/predictions
+      transform:
+        - .isel: [!dag_prev , {y: !slice [~, ~, 33]}]
+  col: y
+
+# Training loss
 loss:
   based_on: loss
   helpers:
     set_scales:
       y: log
 
-# Plot the boundary conditions
 boundary_conditions:
   based_on:
     - .creator.universe
@@ -57,20 +58,25 @@ boundary_conditions:
   select:
     vals: VPINN/training_data
   transform:
-    - .sel: [!dag_tag vals , {'variable': 'x'}]
+    - .sel: [!dag_tag vals , {variable: 'x'}]
       kwargs:
         drop: True
       tag: x
-    - .sel: [!dag_tag vals , {'variable': 'u'}]
+    - .sel: [!dag_tag vals, {variable: 'y'}]
+      kwargs:
+        drop: True
+      tag: t
+    - .sel: [!dag_tag vals , {variable: 'u'}]
       kwargs:
         drop: True
       tag: u
     - xr.Dataset:
       - x: !dag_tag x
+        t: !dag_tag t
         u: !dag_tag u
       tag: data
   x: x
-  y: u
+  y: t
   hue: u
   cmap:
     continuous: true

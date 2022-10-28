@@ -1,0 +1,26 @@
+---
+dirty: true
+git_diff: /Users/thomasgaskin/utopya_output/VPINN/221027-213343_Burgers_grid/config/git_diff_project.patch
+git_status:
+- [M, README.md]
+- ['', M model/DataGeneration.py]
+- ['', M model/VPINN_base_plots.yml]
+- ['', M model/VPINN_cfg.yml]
+- ['', M model/cfgs/Burger1+1D/eval.yml]
+- ['', M model/cfgs/Burger1+1D/run.yml]
+- [AM, model/cfgs/Burger_compact/eval.yml]
+- [AM, model/cfgs/Burger_compact/run.yml]
+- [AM, model/cfgs/Grid_generation_2D/eval.yml]
+- [AM, model/cfgs/Grid_generation_2D/run.yml]
+- ['', M model/cfgs/Poisson2D/eval.yml]
+- ['', M model/cfgs/Poisson2D/run.yml]
+- ['', M model/function_definitions.py]
+- ['', M model/run.py]
+have_git_repo: true
+latest_commit: {author: Thomas Gaskin <tgaskin@live.co.uk>, author_date: '2022-10-26
+    23:51:03', commit: 2afaaf122b2ed68e59eeb784b2b525d9700b659d, gitdir: /Users/thomasgaskin/VPINNs/.git,
+  message: "Merge pull request #8 from ThGaskin/expand_activation_func_selection\n\
+    Expand activation function selection syntax tests and README", parent: 4bd9384660453ab5ae4e78c339fe712fa24d7c40,
+  refs: extend_Burgers_example, tree: b2b18581dc04700dea5c35eea4535e032be41ce0}
+project_base_dir: /Users/thomasgaskin/VPINNs
+project_name: VPINNS

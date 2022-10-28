@@ -22,13 +22,13 @@ loss:
 forcing:
   based_on: line
   select:
-    data: data/f_evaluated
+    data: VPINN/f_evaluated
 
 # Plot the values of f integrated against the test functions
 f_integrated:
   based_on: line
   select:
-    data: data/f_integrated
+    data: VPINN/f_integrated
   x: n_x
   helpers:
     set_tick_locators:
@@ -39,10 +39,10 @@ f_integrated:
       y:
         <<: *formatting
 
-u_boundary:
+boundary_conditions:
   based_on: grid_boundary2d
   select:
-    vals: data/u_exact_boundary
+    vals: VPINN/training_data
   transform:
     - .isel: [ !dag_prev , { variable: 0 } ]
       kwargs:
@@ -90,31 +90,31 @@ predictions:
   hue: kind
 
 # Plot the test functions
-test_functions:
+test_function_plots/test_functions:
   based_on: heatmap
   select:
-    data: data/test_function_values
+    data: grid_test_function_data/test_function_values
   row: n_x
 
 # Plot the first derivative of the test functions
-d1_test_functions:
+test_function_plots/d1_test_functions:
   based_on: test_functions
   select:
-    data: data/d1_test_function_values
+    data: grid_test_function_data/d1_test_function_values
 
 
 # Plot the second derivative of the test functions
-d2_test_functions:
+test_function_plots/d2_test_functions:
   based_on: test_functions
   select:
-    data: data/d2_test_function_values
+    data: grid_test_function_data/d2_test_function_values
 
 # Plot the grid
-grid:
+grid_plots/grid:
   based_on: grid1d
 
-# Plot the solution on the boundary
-grid_boundary:
+# Plot the grid boundary with normals
+grid_plots/grid_boundary:
   based_on: grid_boundary1d
   cmap:
     from_values:

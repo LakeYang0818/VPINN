@@ -26,9 +26,13 @@ EXAMPLES = {
     },
     "CubedRoot": {"u": lambda x: np.sign(x) * np.abs(x) ** (1.0 / 3), "f": lambda x: 1},
     "Burger1+1D": {"u": lambda x: 1.0 / (1 + x[0] ** 2), "f": lambda x: 0},
+    "Burger_compact": {
+        "u": lambda x: np.exp(-6 * x[0] ** 2),
+        "f": lambda x: 0,
+    },  # lambda x: max(-x[0]**2 + 1, 0.0)
     "PorousMedium": {
         "u": lambda x, t: max(
-            t ** (-1 / 3) * (1 - 1.0 / 12 * x**2 * t ** (-2 / 3)), 0
+            t ** (-1 / 3) * (1 - 1.0 / 12 * x**2 * t ** (-2 / 3)), 0.0
         ),
         "f": lambda x: 0,
     },
