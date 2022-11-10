@@ -90,7 +90,7 @@ test_function_plots/test_functions:
       use_legend: False
 
 test_function_plots/d1_test_functions:
-  based_on: test_functions
+  based_on: test_function_plots/test_functions
   select:
     data:
       path: grid_test_function_data/d1_test_function_values
