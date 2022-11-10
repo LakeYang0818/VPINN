@@ -8,6 +8,10 @@ Currently only 1D and 2D grids are supported.
 
 # Dictionary of the examples considered
 EXAMPLES = {
+    "dummy": {
+        "u": lambda x: np.heaviside(x + 0.5, 0) * np.heaviside(-x + 0.5, 0),
+        "f": lambda x: np.heaviside(x + 0.5, 0) * np.heaviside(-x + 0.5, 0),
+    },
     "Tanh": {
         "u": lambda x: 1 * (0.1 * np.sin(4 * np.pi * x) + np.tanh(5 * x)),
         "f": lambda x: -(

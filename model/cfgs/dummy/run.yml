@@ -1,0 +1,39 @@
+---
+paths:
+  model_note: dummy
+perform_sweep: True
+parameter_space:
+  num_epochs: 5000
+  write_predictions_every: 10
+  VPINN:
+    load_data:
+      data_dir: ~
+    space:
+      x:
+        extent: [-1, 1 ]
+        size: 60
+    PDE:
+      function: dummy
+      type: dummy
+    test_functions:
+      type: Legendre
+      num_functions:
+        n_x:
+          size: !sweep
+            default: 5
+            values: [5, 10, 20, 40]
+            name: num_test_functions
+      weight_function: uniform
+    variational_form: 0
+    NeuralNet:
+      num_layers: 1
+      nodes_per_layer: !sweep
+        default: 20
+        values: [10, 20, 40]
+      activation_funcs:
+        0: tanh
+        1: abs
+    Training:
+      device: cpu
+      learning_rate: 0.001
+      variational_loss_weight: 20

@@ -1,0 +1,84 @@
+---
+.colors: &colors
+  yellow:         &yellow           '#F5DDA9'
+  darkblue:       &darkblue         '#2F7194'
+  red:            &red              '#ec7070'
+  skyblue:        &skyblue          '#97c3d0'
+  darkgreen:      &darkgreen        '#48675A'
+  lightbrown:     &lightbrown       '#C6BFA2'
+  orange:         &orange           '#EC9F7E'
+  lightgreen:     &lightgreen       '#AFD8BC'
+  grey:           &grey             '#3D4244'
+
+# Training loss
+loss:
+  based_on: loss
+  helpers:
+    set_scales:
+      y: log
+
+# Plot the predictions and exact solution
+predictions:
+  based_on: line
+  select:
+    prediction:
+      path: VPINN/prediction_final
+      transform:
+        - .data: [!dag_prev ]
+    solution:
+      path: VPINN/u_exact
+      transform:
+        - .data: [!dag_prev ]
+  transform:
+    - operation: pd.Index
+      args: [ [ 'prediction', 'exact solution' ] ]
+      kwargs:
+        name: 'kind'
+    - xr.concat: [ [ !dag_tag prediction, !dag_tag solution ], !dag_prev ]
+      tag: data
+  hue: kind
+
+# Plot f evaluated on the grid
+forcing:
+  based_on: line
+  select:
+    data: VPINN/f_evaluated
+
+# L-infinity loss over time
+convergence:
+  based_on: line
+  select:
+    u_exact: VPINN/u_exact
+    predictions: VPINN/predictions_over_time
+  transform:
+    - sub: [!dag_tag predictions, !dag_tag u_exact]
+    - np.abs: [!dag_prev ]
+    - .max: [!dag_prev ]
+      kwargs:
+        dim: x
+      tag: data
+  x: time
+
+convergence_stacked:
+  expected_multiverse_ndim: [1, 2, 3, 4, 5]
+  based_on:
+    - .creator.multiverse
+    - .plot.facet_grid.line
+  select_and_combine:
+    fields:
+      u_exact: VPINN/u_exact
+      predictions: VPINN/predictions_over_time
+  transform:
+    - sub: [ !dag_tag predictions, !dag_tag u_exact ]
+    - np.abs: [ !dag_prev ]
+    - .max: [ !dag_prev ]
+      kwargs:
+        dim: x
+      tag: data
+  x: time
+  hue: nodes_per_layer
+  col: num_test_functions
+  col_wrap: 2
+  helpers:
+    set_labels:
+      y: $L^\infty (\hat{u} - u)$
