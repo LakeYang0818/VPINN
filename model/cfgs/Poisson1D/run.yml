@@ -22,13 +22,12 @@ parameter_space:
     variational_form: 0
     NeuralNet:
       num_layers: 4
-      nodes_per_layer: 20
+      nodes_per_layer:
+        default: 20
       activation_funcs:
-        0: tanh
-        1: tanh
-        2: tanh
-        3: tanh
-        4: linear
+        default: tanh
+        layer_specific:
+          -1: linear
     Training:
       device: cpu
       learning_rate: 0.001

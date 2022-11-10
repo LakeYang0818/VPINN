@@ -17,12 +17,12 @@ PDE:
   type: !param
     default: Burger
     dtype: str
-    is_any_of: [Poisson, Burger]
+    is_any_of: [Burger, dummy, Poisson]
   # External function example
   function: !param
     default: Tanh
     dtype: str
-    is_any_of: [Tanh, Tanh2D, SinSin2D, Burger1+1D, Burger_compact, DoubleGauss1D, CubedRoot, PorousMedium]
+    is_any_of: [dummy, Tanh, Tanh2D, SinSin2D, Burger1+1D, Burger_compact, DoubleGauss1D, CubedRoot, PorousMedium]
   # Scalar parameters for the equations
   PorousMedium:
     m: 2
@@ -55,11 +55,15 @@ test_functions:
 # Neural net architecture ..............................................................................................
 NeuralNet:
   num_layers: !is-positive-int 4
-  nodes_per_layer: !is-positive-int 20
-  activation_funcs: tanh
+  nodes_per_layer:
+    default: 20
+  activation_funcs:
+    default: tanh
   optimizer: !param
     default: Adam
     is_any_of: [Adagrad, Adam, AdamW, SparseAdam, Adamax, ASGD, LBFGS, NAdam, RAdam, RMSprop, Rprop, SGD]
+  biases:
+    default: default
 
 # Training settings ....................................................................................................
 Training:

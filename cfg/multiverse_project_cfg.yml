@@ -9,6 +9,7 @@ parameter_space:
   num_epochs: 100
   write_start: 1
   write_every: 1
+  write_predictions_every: -1
 
 # Data loading configuration
 data_manager:
