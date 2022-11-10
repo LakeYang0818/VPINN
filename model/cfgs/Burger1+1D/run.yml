@@ -25,13 +25,12 @@ parameter_space:
       weight_function: exponential
     NeuralNet:
       num_layers: 4
-      nodes_per_layer: 20
+      nodes_per_layer:
+        default: 20
       activation_funcs:
-        0: relu
-        1: relu
-        2: relu
-        3: relu
-        4: linear
+        default: relu
+        layer_specific:
+          -1: linear
     variational_form: 1
     Training:
       boundary: lower

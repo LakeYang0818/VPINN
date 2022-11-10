@@ -55,11 +55,15 @@ test_functions:
 # Neural net architecture ..............................................................................................
 NeuralNet:
   num_layers: !is-positive-int 4
-  nodes_per_layer: !is-positive-int 20
-  activation_funcs: tanh
+  nodes_per_layer:
+    default: 20
+  activation_funcs:
+    default: tanh
   optimizer: !param
     default: Adam
     is_any_of: [Adagrad, Adam, AdamW, SparseAdam, Adamax, ASGD, LBFGS, NAdam, RAdam, RMSprop, Rprop, SGD]
+  biases:
+    default: default
 
 # Training settings ....................................................................................................
 Training:

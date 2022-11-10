@@ -242,42 +242,49 @@ config:
 ```yaml
 NeuralNet:
   num_layers: 6
-  nodes_per_layer: 20
+  nodes_per_layer:
+    default: 20
+    layer_specific:
+      0: 10
   activation_funcs:
-    0: sine
-    1: cosine
-    2: tanh
-    -1: abs
-  bias: True
-  init_bias: [0, 4]
+    default: sigmoid
+    layer_specific:
+      0: sine
+      1: cosine
+      2: tanh
+      -1: abs
+  biases:
+    default: [0, 4]
+    layer_specific:
+      1: [-1, 1]
   learning_rate: 0.002
 ```
-``num_layers`` and ``nodes_per_layer`` give the structure of the hidden layers (hidden layers
-with different numbers of nodes is not yet supported).
-``bias`` controls use of the bias, and the ``init_bias`` sets the initialisation interval for the
-bias. The ``activation_funcs`` dictionary
-allows specifying the activation function on each layer: just add the number of the layer together
-with the name of a
-[pytorch activation function](https://pytorch.org/docs/stable/nn.html#non-linear-activations-weighted-sum-nonlinearity),
-such as ``relu``, ``linear``, ``tanh``, ``sigmoid``, etc. You can also provide a single activation function
-for all layers:
-```yaml
-NeuralNet:
-  activation_funcs: sigmoid
-```
-Some activation functions take arguments and keyword arguments; these can be provided like this:
+``num_layers`` sets the number of hidden layers. ``nodes_per_layer``, ``activation_funcs``, and ``biases`` are
+dictionaries controlling the structure of the hidden layers. Each requires a ``default`` key
+giving the default value, applied to all layers. An optional ``layer_specific`` entry
+controls any deviations from the default on specific layers; in the above example,
+all layers have 20 nodes by default, use a sigmoid activation function, and have a bias
+which is initialised uniformly at random on [0, 4]. Layer-specific settings are then provided.
+You can also set the bias initialisation to `default`: this then uses the
+[pytorch default value](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) on each layer of
+`U[-1/k, +1/k]`, where `k = in_features`.
+
+Any [pytorch activation function](https://pytorch.org/docs/stable/nn.html#non-linear-activations-weighted-sum-nonlinearity)
+is supported, such as ``relu``, ``linear``, ``tanh``, ``sigmoid``, etc. Some activation functions take arguments and
+keyword arguments; these can be provided like this:
 
 ```yaml
 NeuralNet:
   num_layers: 6
   nodes_per_layer: 20
   activation_funcs:
-    name: Hardtanh
-    args:
-      - -2 #min_value
-      - +2 #max_value
-    kwargs:
-      # kwargs here ...
+    default:
+      name: Hardtanh
+      args:
+        - -2 # min_value
+        - +2 # max_value
+      kwargs:
+        # any kwargs here ...
 ```
 
 
