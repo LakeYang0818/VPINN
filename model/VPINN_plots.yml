@@ -89,25 +89,23 @@ predictions:
       tag: data
   hue: kind
 
-# Plot the test functions
+# Test functions
 test_function_plots/test_functions:
-  based_on: heatmap
+  based_on:
+    - .creator.universe
+    - .plot.facet_grid.line
   select:
     data: grid_test_function_data/test_function_values
-  row: n_x
+  hue: n_x
+  helpers:
+    set_legend:
+      use_legend: False
 
-# Plot the first derivative of the test functions
+# Test function derivatives
 test_function_plots/d1_test_functions:
-  based_on: test_functions
+  based_on: test_function_plots/test_functions
   select:
     data: grid_test_function_data/d1_test_function_values
-
-
-# Plot the second derivative of the test functions
-test_function_plots/d2_test_functions:
-  based_on: test_functions
-  select:
-    data: grid_test_function_data/d2_test_function_values
 
 # Plot the grid
 grid_plots/grid:
