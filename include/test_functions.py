@@ -30,6 +30,8 @@ def test_function_1d(x: Any, index: int, *, d: int = 0, type: str) -> float:
 
         """The d-th derivative of the nth Chebyshev polynomial of the first kind (including for d=0)"""
 
+        n = n.item() if isinstance(n, np.ndarray) else n
+
         if d > n:
             return 0
         elif d == 0:
