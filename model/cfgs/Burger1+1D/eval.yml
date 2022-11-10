@@ -22,7 +22,7 @@ frames:
     - .plot.facet_grid.with_auto_encoding
   select:
     data:
-      path: VPINN/predictions
+      path: VPINN/prediction_final
       transform:
         - .isel: [!dag_prev , {y: !slice [~, ~, 33]}]
   col: y
@@ -35,7 +35,7 @@ animation:
     - .animation.ffmpeg
   select:
     data:
-      path: VPINN/predictions
+      path: VPINN/prediction_final
   x: x
   frames: y
   helpers:

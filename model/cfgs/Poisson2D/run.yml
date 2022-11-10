@@ -30,14 +30,12 @@ parameter_space:
     # Neural net architecture
     NeuralNet:
       num_layers: 4
-      nodes_per_layer: 20
+      nodes_per_layer:
+        default: 20
       activation_funcs:
-        0: tanh
-        1: tanh
-        2: tanh
-        3: tanh
-        4: None
-
+        default: tanh
+        layer_specific:
+          4: linear
     # Settings for the prediction resolution: updates the 'space' dictionary
     predictions_grid:
       x:
