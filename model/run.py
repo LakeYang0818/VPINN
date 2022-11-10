@@ -41,6 +41,7 @@ class VPINN:
         device: str,
         write_every: int = 1,
         write_start: int = 1,
+        write_predictions_every: int = -1,
         grid: xr.DataArray,
         training_data: xr.Dataset = None,
         f_integrated: xr.DataArray,
@@ -196,9 +197,10 @@ class VPINN:
 
         self._write_every = write_every
         self._write_start = write_start
+        self._write_predictions_every = write_predictions_every
 
         # The grid interior
-        self.grid: torch.Tensor = (
+        self.grid_interior: torch.Tensor = (
             torch.reshape(
                 torch.from_numpy(
                     grid.isel(
@@ -273,6 +275,44 @@ class VPINN:
             .to(device)
         )
 
+        # Store current predictions, if specified
+        if self._write_predictions_every > 0:
+
+            # The grid interior
+            self.grid: torch.Tensor = (
+                torch.reshape(
+                    torch.from_numpy(grid.to_numpy()).float(),
+                    (-1, grid.attrs["grid_dimension"]),
+                )
+                .requires_grad_(True)
+                .to(device)
+            )
+
+            self._dset_current_predictions = self._h5group.create_dataset(
+                "predictions_over_time",
+                (0,) + self.grid.shape,
+                maxshape=(None,) + self.grid.shape,
+                chunks=True,
+                compression=3,
+            )
+            self._dset_current_predictions.attrs["dim_names"] = ["time"] + list(
+                grid.sizes
+            )
+            self._dset_current_predictions.attrs["coords_mode__time"] = "start_and_step"
+            self._dset_current_predictions.attrs["coords__time"] = [
+                write_start,
+                write_predictions_every,
+            ]
+
+            # Set attributes
+            for idx in list(grid.sizes):
+                self._dset_current_predictions.attrs[
+                    "coords_mode__" + str(idx)
+                ] = "values"
+                self._dset_current_predictions.attrs[
+                    "coords__" + str(idx)
+                ] = grid.coords[idx].data
+
     def epoch(
         self, *, boundary_loss_weight: float = 1.0, variational_loss_weight: float = 1.0
     ):
@@ -294,7 +334,7 @@ class VPINN:
 
         variational_loss = self.neural_net.variational_loss(
             self.device,
-            self.grid,
+            self.grid_interior,
             self.grid_boundary,
             self.grid_normals,
             self.f_integrated,
@@ -344,6 +384,18 @@ class VPINN:
                 [self.current_boundary_loss],
                 [self.current_variational_loss],
             ]
+
+        if self._write_predictions_every > 0:
+            if self._time >= self._write_start and (
+                self._time % self._write_predictions_every == 0
+            ):
+
+                self._dset_current_predictions.resize(
+                    self._dset_current_predictions.shape[0] + 1, axis=0
+                )
+                self._dset_current_predictions[-1, :] = (
+                    self.neural_net.forward(self.grid).detach().numpy()
+                )
 
 
 if __name__ == "__main__":
@@ -449,6 +501,7 @@ if __name__ == "__main__":
         device=device,
         write_every=cfg["write_every"],
         write_start=cfg["write_start"],
+        write_predictions_every=cfg["write_predictions_every"],
         weight_function=this.WEIGHT_FUNCTIONS[
             model_cfg["test_functions"]["weight_function"].lower()
         ],
@@ -522,7 +575,7 @@ if __name__ == "__main__":
     ] = u_exact
 
     dset_predictions = h5group.create_dataset(
-        "predictions",
+        "prediction_final",
         list(predictions.sizes.values()),
         maxshape=list(predictions.sizes.values()),
         chunks=True,

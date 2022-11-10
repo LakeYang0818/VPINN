@@ -302,7 +302,7 @@ predictions_1D:
   based_on: line
   select:
     prediction:
-      path: VPINN/predictions
+      path: VPINN/prediction_final
       transform:
         - .data: [!dag_prev ]
     solution:
@@ -322,7 +322,7 @@ predictions_1D:
 predictions_2D:
   based_on: heatmap
   select:
-    data: VPINN/predictions
+    data: VPINN/prediction_final
 
 # Plots the test functions
 test_functions:

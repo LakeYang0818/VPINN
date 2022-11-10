@@ -13,7 +13,7 @@
 predictions:
   based_on: heatmap
   select:
-    data: VPINN/predictions
+    data: VPINN/prediction_final
 
 solution:
   based_on: heatmap
@@ -23,7 +23,7 @@ solution:
 error:
   based_on: heatmap
   select:
-    prediction: VPINN/predictions
+    prediction: VPINN/prediction_final
     solution: VPINN/u_exact
   transform:
     - sub: [!dag_tag prediction, !dag_tag solution]

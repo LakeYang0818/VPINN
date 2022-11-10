@@ -119,6 +119,7 @@ class NeuralNet(nn.Module):
 
     EQUATION_TYPES = {
         "Burger",
+        "dummy",
         # "Helmholtz",
         "Poisson",
         # "PorousMedium",
@@ -288,6 +289,18 @@ class NeuralNet(nn.Module):
                 d1test_func_vals,
                 weights,
                 self._pde_constants.get("Burger", 0),
+            )
+
+        elif self._eq_type == "dummy":
+
+            return dummy(
+                device,
+                self.forward,
+                grid,
+                domain_density,
+                f_integrated,
+                test_func_vals,
+                weights,
             )
 
         # elif self._eq_type == "Helmholtz":
