@@ -4,7 +4,11 @@ paths:
 perform_sweep: True
 parameter_space:
   num_epochs: 5000
-  write_predictions_every: 10
+  write_every: 20
+  write_predictions_every: 20
+  seed: !sweep
+    default: 0
+    range: [5]
   VPINN:
     load_data:
       data_dir: ~
@@ -20,20 +24,24 @@ parameter_space:
       num_functions:
         n_x:
           size: !sweep
-            default: 5
+            default: 10
             values: [5, 10, 20, 40]
             name: num_test_functions
       weight_function: uniform
     variational_form: 0
     NeuralNet:
-      num_layers: 1
-      nodes_per_layer: !sweep
-        default: 20
-        values: [10, 20, 40]
+      num_layers: 10
+      nodes_per_layer:
+        default: !sweep
+          default: 10
+          values: [10, 50, 100]
+          name: nodes_per_layer
       activation_funcs:
-        0: tanh
-        1: abs
+        default: !sweep
+          default: tanh
+          values: [sine, tanh]
+          name: activation_func
     Training:
       device: cpu
       learning_rate: 0.001
-      variational_loss_weight: 20
+      variational_loss_weight: 1
